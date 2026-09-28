@@ -23,7 +23,7 @@ fn terminal_specific_environment_markers_are_used_without_ancestry() {
     );
     assert_eq!(
         detect(&[("GNOME_TERMINAL_SCREEN", ":0")], &[]),
-        Terminal::GnomeTerminal
+        Terminal::Gnome
     );
 }
 
@@ -49,7 +49,7 @@ fn nearest_recognized_parent_terminal_takes_priority() {
             &[("TERM", "screen")],
             &["bash", "/usr/bin/gnome-terminal-server"]
         ),
-        Terminal::GnomeTerminal
+        Terminal::Gnome
     );
     assert_eq!(
         detect(&[("KITTY_WINDOW_ID", "1")], &["bash", "/usr/bin/foot"]),

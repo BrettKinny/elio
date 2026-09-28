@@ -4,6 +4,7 @@ mod layout;
 mod loading;
 mod open;
 mod places;
+mod portal;
 mod preview;
 #[cfg(test)]
 mod tests;
@@ -20,6 +21,7 @@ pub(crate) use self::{
     loading::config_dir,
     open::{OpenConfig, OpenPlatform, OpenRule, OpenTargetType},
     places::{BuiltinPlace, PlaceEntrySpec, PlacesConfig},
+    portal::PortalConfig,
     preview::PreviewConfig,
     ui::UiConfig,
 };

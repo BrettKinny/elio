@@ -23,7 +23,7 @@ enum Terminal {
     Alacritty,
     Rio,
     Konsole,
-    GnomeTerminal,
+    Gnome,
     Xterm,
     Unknown,
 }
@@ -38,7 +38,7 @@ impl Terminal {
             Self::Alacritty => "alacritty",
             Self::Rio => "rio",
             Self::Konsole => "konsole",
-            Self::GnomeTerminal => "gnome-terminal",
+            Self::Gnome => "gnome-terminal",
             Self::Xterm => "xterm",
             Self::Unknown => "unknown",
         }
@@ -92,7 +92,7 @@ fn detect_terminal_with(
         return Terminal::Konsole;
     }
     if has("GNOME_TERMINAL_SCREEN") || has("GNOME_TERMINAL_SERVICE") {
-        return Terminal::GnomeTerminal;
+        return Terminal::Gnome;
     }
 
     let term_program = env_lookup("TERM_PROGRAM")
@@ -146,7 +146,7 @@ fn classify_name(name: &str) -> Option<Terminal> {
         "alacritty" => Some(Terminal::Alacritty),
         "rio" => Some(Terminal::Rio),
         "konsole" => Some(Terminal::Konsole),
-        "gnome-terminal" | "gnome-terminal-server" => Some(Terminal::GnomeTerminal),
+        "gnome-terminal" | "gnome-terminal-server" => Some(Terminal::Gnome),
         "xterm" => Some(Terminal::Xterm),
         _ => None,
     }

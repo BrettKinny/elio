@@ -1,5 +1,6 @@
 use super::{
-    GotoConfig, KeyBindings, LayoutConfig, OpenConfig, PlacesConfig, PreviewConfig, UiConfig,
+    GotoConfig, KeyBindings, LayoutConfig, OpenConfig, PlacesConfig, PortalConfig, PreviewConfig,
+    UiConfig,
 };
 #[cfg(unix)]
 use crate::elevated_session::InvocationContext;
@@ -20,6 +21,7 @@ pub(super) struct Config {
     pub(super) layout: LayoutConfig,
     pub(super) keys: KeyBindings,
     pub(super) open: OpenConfig,
+    pub(super) portal: PortalConfig,
 }
 
 #[derive(Deserialize, Default)]
@@ -31,6 +33,7 @@ struct ConfigFile {
     layout: Option<super::layout::LayoutConfigOverride>,
     keys: Option<super::key_bindings::KeysConfigOverride>,
     open: Option<super::open::OpenConfigOverride>,
+    portal: Option<super::portal::PortalConfigOverride>,
 }
 
 pub(super) fn initialize(path: Option<&Path>) -> anyhow::Result<()> {
@@ -168,6 +171,7 @@ impl Config {
             layout: LayoutConfig::default(),
             keys: KeyBindings::default(),
             open: OpenConfig::default(),
+            portal: PortalConfig::default(),
         }
     }
 
@@ -197,6 +201,9 @@ impl Config {
         }
         if let Some(open) = parsed.open {
             resolved.open = OpenConfig::from_override(open, &resolved.open);
+        }
+        if let Some(portal) = parsed.portal {
+            resolved.portal.apply_override(portal);
         }
         Ok(resolved)
     }
