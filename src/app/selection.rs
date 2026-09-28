@@ -69,13 +69,22 @@ impl App {
         self.chooser.enable_save_as(name);
         self.status = "Save as mode".to_string();
     }
-    #[allow(dead_code)] // Wired by the portal chooser child in the next roadmap step.
+    #[allow(dead_code)] // Used by focused chooser contract tests.
     pub(crate) fn enable_portal_chooser_mode(
         &mut self,
         mode: crate::chooser::portal::PortalChooserMode,
     ) -> crate::chooser::portal::ExternalCancellation {
         self.status = "Chooser mode".to_string();
         self.chooser.enable_portal(mode)
+    }
+    pub(crate) fn enable_portal_chooser_mode_with_cancellation(
+        &mut self,
+        mode: crate::chooser::portal::PortalChooserMode,
+        cancellation: crate::chooser::portal::ExternalCancellation,
+    ) {
+        self.status = "Chooser mode".to_string();
+        self.chooser
+            .enable_portal_with_cancellation(mode, cancellation);
     }
     pub(crate) fn save_as_mode(&self) -> bool {
         self.chooser.is_save_as()

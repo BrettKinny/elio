@@ -6,4 +6,4 @@ mod tui_drawing;
 mod tui_event_loop;
 mod zoxide;
 
-pub(crate) use tui_event_loop::run_with_startup_state;
+pub(crate) use tui_event_loop::{run_portal_chooser, run_with_startup_state};

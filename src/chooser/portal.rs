@@ -55,13 +55,15 @@ pub(crate) struct PortalChooser {
 impl PortalChooser {
     pub(crate) fn new(mode: PortalChooserMode) -> (Self, ExternalCancellation) {
         let cancellation = ExternalCancellation::default();
-        (
-            Self {
-                mode,
-                cancellation: cancellation.clone(),
-            },
-            cancellation,
-        )
+        let chooser = Self::with_cancellation(mode, cancellation.clone());
+        (chooser, cancellation)
+    }
+
+    pub(crate) fn with_cancellation(
+        mode: PortalChooserMode,
+        cancellation: ExternalCancellation,
+    ) -> Self {
+        Self { mode, cancellation }
     }
 
     pub(crate) fn save_as_state(&self) -> Option<SaveAsState> {

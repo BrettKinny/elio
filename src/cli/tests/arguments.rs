@@ -30,6 +30,22 @@ fn standard_actions_are_recognized() {
 }
 
 #[test]
+fn hidden_portal_chooser_requires_a_socket() {
+    let action = parse(strings(&[
+        "--portal-chooser",
+        "--socket",
+        "/tmp/request.sock",
+    ]))
+    .unwrap();
+    assert!(matches!(
+        action,
+        Action::PortalChooser(path) if path == std::path::Path::new("/tmp/request.sock")
+    ));
+    assert!(parse(strings(&["--portal-chooser"])).is_err());
+    assert!(parse(strings(&["--portal-chooser", "/tmp/request.sock"])).is_err());
+}
+
+#[test]
 fn save_as_requires_chooser_file_and_accepts_one_path_in_any_flag_order() {
     assert!(
         parse(strings(&["--save-as"]))

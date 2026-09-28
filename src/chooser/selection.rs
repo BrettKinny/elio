@@ -27,13 +27,21 @@ impl ChooserState {
         self.enabled = true;
         self.save_as = Some(SaveAsState::new(name));
     }
-    #[allow(dead_code)] // Wired by the portal chooser child in the next roadmap step.
+    #[allow(dead_code)] // Used by focused chooser contract tests.
     pub(crate) fn enable_portal(&mut self, mode: PortalChooserMode) -> ExternalCancellation {
-        let (portal, cancellation) = PortalChooser::new(mode);
+        let cancellation = ExternalCancellation::default();
+        self.enable_portal_with_cancellation(mode, cancellation.clone());
+        cancellation
+    }
+    pub(crate) fn enable_portal_with_cancellation(
+        &mut self,
+        mode: PortalChooserMode,
+        cancellation: ExternalCancellation,
+    ) {
+        let portal = PortalChooser::with_cancellation(mode, cancellation);
         self.enabled = true;
         self.save_as = portal.save_as_state();
         self.portal = Some(portal);
-        cancellation
     }
     pub(crate) fn save_as(&self) -> Option<&SaveAsState> {
         self.save_as.as_ref()

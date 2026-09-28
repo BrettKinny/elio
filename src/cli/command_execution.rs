@@ -27,6 +27,9 @@ fn dispatch(action: Action) -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Action::Portal(command) => portal::execute(command).map(|()| ExitCode::SUCCESS),
+        Action::PortalChooser(socket) => {
+            elio::run_portal_chooser(socket).map(|()| ExitCode::SUCCESS)
+        }
         Action::UserFsHelper => elio::run_user_fs_helper().map(|()| ExitCode::SUCCESS),
     }
 }

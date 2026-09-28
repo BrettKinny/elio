@@ -76,6 +76,12 @@ pub fn run_user_fs_helper() -> Result<()> {
     }
 }
 
+/// Runs the hidden portal chooser child mode over its private socket.
+#[doc(hidden)]
+pub fn run_portal_chooser(socket: PathBuf) -> Result<()> {
+    portal::chooser_child::run(&socket)
+}
+
 #[doc(hidden)]
 pub fn ensure_portal_terminal(
     detect_terminal: impl FnOnce() -> Option<portal::terminal::TerminalAdapter>,
