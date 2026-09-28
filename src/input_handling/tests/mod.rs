@@ -9,6 +9,7 @@ mod local_filter;
 mod mouse;
 mod navigation;
 mod open_with;
+mod portal;
 mod preview;
 mod preview_wheel;
 mod save_as;

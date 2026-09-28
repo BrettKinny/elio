@@ -454,6 +454,9 @@ fn run_app(
     let mut pending_drop_in = kitty_dnd::PendingDropIn::default();
 
     loop {
+        if app.apply_external_chooser_cancellation() {
+            break;
+        }
         if app.should_quit {
             break;
         }
