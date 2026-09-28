@@ -72,9 +72,11 @@ fn unknown_terminal_stays_unknown() {
 #[test]
 fn enable_is_gated_to_linux_and_freebsd_without_running_detection_elsewhere() {
     for platform in ["macos", "windows", "openbsd"] {
-        let error = enable_with(platform, || panic!("unsupported platforms must not detect"))
-            .unwrap_err()
-            .to_string();
+        let error = enable_with(platform, || -> anyhow::Result<()> {
+            panic!("unsupported platforms must not detect")
+        })
+        .unwrap_err()
+        .to_string();
         assert_eq!(
             error,
             "error: `elio portal enable` is only supported on Linux and FreeBSD"
@@ -82,11 +84,11 @@ fn enable_is_gated_to_linux_and_freebsd_without_running_detection_elsewhere() {
     }
 
     assert_eq!(
-        enable_with("linux", || Terminal::Konsole).unwrap(),
+        enable_with("linux", || Ok(Terminal::Konsole)).unwrap(),
         Terminal::Konsole
     );
     assert_eq!(
-        enable_with("freebsd", || Terminal::Xterm).unwrap(),
+        enable_with("freebsd", || Ok(Terminal::Xterm)).unwrap(),
         Terminal::Xterm
     );
 }

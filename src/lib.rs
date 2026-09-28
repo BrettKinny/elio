@@ -28,7 +28,7 @@ mod terminal_runtime;
 mod theme;
 mod ui;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::path::PathBuf;
 
 #[derive(Debug, Default)]
@@ -72,6 +72,19 @@ pub fn run_user_fs_helper() -> Result<()> {
     #[cfg(not(unix))]
     {
         elevated_session::run()
+    }
+}
+
+#[doc(hidden)]
+pub fn ensure_portal_terminal(
+    detect_terminal: impl FnOnce() -> Option<&'static str>,
+) -> Result<(bool, &'static str)> {
+    let path = config::config_path().context("error: could not determine the Elio config path")?;
+    match config::ensure_portal_terminal(&path, || {
+        detect_terminal().and_then(config::PortalTerminal::from_name)
+    })? {
+        config::ConfigurePortalTerminal::Existing(terminal) => Ok((false, terminal.name())),
+        config::ConfigurePortalTerminal::Configured(terminal) => Ok((true, terminal.name())),
     }
 }
 

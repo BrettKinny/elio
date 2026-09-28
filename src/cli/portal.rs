@@ -48,19 +48,29 @@ impl Terminal {
 pub(super) fn execute(command: PortalCommand) -> Result<()> {
     match command {
         PortalCommand::Enable => {
-            let terminal = enable_with(env::consts::OS, detect_current_terminal)?;
-            println!("Detected terminal: {}", terminal.name());
+            let (configured, terminal) = enable_with(env::consts::OS, || {
+                elio::ensure_portal_terminal(|| configured_name(detect_current_terminal()))
+            })?;
+            if configured {
+                println!("Configured portal terminal: {terminal}");
+            } else {
+                println!("Portal terminal is already configured: {terminal}");
+            }
         }
         PortalCommand::Disable | PortalCommand::Status => {}
     }
     anyhow::bail!("error: portal integration is not implemented yet")
 }
 
-fn enable_with(platform: &str, detect_terminal: impl FnOnce() -> Terminal) -> Result<Terminal> {
+fn enable_with<T>(platform: &str, enable: impl FnOnce() -> Result<T>) -> Result<T> {
     if !matches!(platform, "linux" | "freebsd") {
         anyhow::bail!("error: `elio portal enable` is only supported on Linux and FreeBSD")
     }
-    Ok(detect_terminal())
+    enable()
+}
+
+fn configured_name(terminal: Terminal) -> Option<&'static str> {
+    (terminal != Terminal::Unknown).then(|| terminal.name())
 }
 
 fn detect_current_terminal() -> Terminal {

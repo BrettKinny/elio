@@ -18,10 +18,10 @@ pub(crate) use self::{
         Action, ChooserKeyAction, KeyBindings, KeyContext, KeyList, normalized_plain_key_char,
     },
     layout::{LayoutConfig, PaneWeights},
-    loading::config_dir,
+    loading::{config_dir, config_path},
     open::{OpenConfig, OpenPlatform, OpenRule, OpenTargetType},
     places::{BuiltinPlace, PlaceEntrySpec, PlacesConfig},
-    portal::PortalConfig,
+    portal::{ConfigurePortalTerminal, PortalConfig, PortalTerminal, ensure_portal_terminal},
     preview::PreviewConfig,
     ui::UiConfig,
 };

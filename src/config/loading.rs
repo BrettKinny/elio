@@ -157,7 +157,7 @@ fn load_config_from_disk(override_path: Option<&Path>) -> anyhow::Result<Config>
     })
 }
 
-fn config_path() -> Option<PathBuf> {
+pub(crate) fn config_path() -> Option<PathBuf> {
     config_dir().map(|dir| dir.join("config.toml"))
 }
 
