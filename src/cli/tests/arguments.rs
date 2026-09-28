@@ -99,6 +99,44 @@ fn shell_integration_commands_are_recognized() {
 }
 
 #[test]
+fn portal_commands_and_help_topics_are_recognized() {
+    assert!(matches!(
+        parse(strings(&["portal", "enable"])).unwrap(),
+        Action::Portal
+    ));
+    assert!(matches!(
+        parse(strings(&["portal", "disable"])).unwrap(),
+        Action::Portal
+    ));
+    assert!(matches!(
+        parse(strings(&["portal", "status"])).unwrap(),
+        Action::Portal
+    ));
+    assert!(matches!(
+        parse(strings(&["portal", "--help"])).unwrap(),
+        Action::Help(HelpTopic::Portal)
+    ));
+    assert!(matches!(
+        parse(strings(&["portal", "enable", "--help"])).unwrap(),
+        Action::Help(HelpTopic::Portal)
+    ));
+}
+
+#[test]
+fn portal_rejects_unknown_or_extra_arguments() {
+    let unknown = parse(strings(&["portal", "unknown"]))
+        .unwrap_err()
+        .to_string();
+    assert!(unknown.contains("expected subcommand 'enable', 'disable', or 'status'"));
+
+    let extra = parse(strings(&["portal", "status", "extra"]))
+        .unwrap_err()
+        .to_string();
+    assert!(extra.contains("error: unexpected argument 'extra' found"));
+    assert!(extra.contains("Usage: elio portal <COMMAND>"));
+}
+
+#[test]
 fn duplicate_options_include_run_usage() {
     let error = duplicate_option("--config").to_string();
     assert!(error.contains("error: '--config' cannot be used more than once"));

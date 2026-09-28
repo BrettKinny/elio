@@ -26,6 +26,7 @@ fn dispatch(action: Action) -> Result<ExitCode> {
             shell_commands::execute(command)?;
             Ok(ExitCode::SUCCESS)
         }
+        Action::Portal => anyhow::bail!("error: portal integration is not implemented yet"),
         Action::UserFsHelper => elio::run_user_fs_helper().map(|()| ExitCode::SUCCESS),
     }
 }

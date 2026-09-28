@@ -44,7 +44,7 @@ fn posix_init_script(executable: &str) -> String {
     format!(
         r#"elio() {{
     case "${{1-}}" in
-        shell|-*)
+        shell|portal|-*)
             {executable} "$@"
             return $?
             ;;
@@ -84,7 +84,7 @@ fn fish_init_script(executable: &str) -> String {
     format!(
         r#"function elio
     switch "$argv[1]"
-        case shell '-*'
+        case shell portal '-*'
             {executable} $argv
             return $status
     end
@@ -141,6 +141,7 @@ fn nu_init_script(executable: &str) -> String {
 
   if (($args | length) > 0) and (
     (($args.0 | into string) == 'shell') or
+    (($args.0 | into string) == 'portal') or
     (($args.0 | into string) | str starts-with '-')
   ) {{
     let result = (
