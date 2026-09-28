@@ -26,10 +26,30 @@ pub(super) fn execute(command: PortalCommand) -> Result<()> {
             } else {
                 println!("Portal terminal is already configured: {terminal}");
             }
+            let result = elio::enable_portal_metadata()?;
+            println!("Portal descriptor: {}", result.portal_path.display());
+            println!("D-Bus service: {}", result.service_path.display());
+            println!("Portal launcher: {}", result.launcher.display());
+            if !result.created_portal || !result.created_service {
+                println!("Portal metadata was already present and verified.");
+            }
         }
-        PortalCommand::Disable | PortalCommand::Status => {}
+        PortalCommand::Disable => {
+            let result = elio::disable_portal_metadata()?;
+            if result.removed_portal || result.removed_service {
+                println!("Removed Elio-owned portal metadata.");
+            } else {
+                println!("No Elio-owned portal metadata to remove.");
+            }
+        }
+        PortalCommand::Status => {
+            let status = elio::portal_metadata_status()?;
+            println!("elio FileChooser portal metadata: {}", status.state);
+            println!("Portal descriptor: {}", status.portal_path.display());
+            println!("D-Bus service: {}", status.service_path.display());
+        }
     }
-    anyhow::bail!("error: portal integration is not implemented yet")
+    Ok(())
 }
 
 fn enable_with<T>(platform: &str, enable: impl FnOnce() -> Result<T>) -> Result<T> {

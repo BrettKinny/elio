@@ -106,6 +106,45 @@ pub fn ensure_portal_terminal(
     }
 }
 
+/// Installs the user-local portal metadata and verifies D-Bus activation.
+#[doc(hidden)]
+pub fn enable_portal_metadata() -> Result<portal::activation::EnableResult> {
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    {
+        portal::activation::enable()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+    {
+        anyhow::bail!("the FileChooser portal backend is supported only on Linux and FreeBSD")
+    }
+}
+
+/// Removes metadata that Elio can prove it created and still owns.
+#[doc(hidden)]
+pub fn disable_portal_metadata() -> Result<portal::activation::DisableResult> {
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    {
+        portal::activation::disable()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+    {
+        anyhow::bail!("the FileChooser portal backend is supported only on Linux and FreeBSD")
+    }
+}
+
+/// Inspects only user-local portal metadata; it does not alter portal routing.
+#[doc(hidden)]
+pub fn portal_metadata_status() -> Result<portal::activation::Status> {
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    {
+        portal::activation::status()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+    {
+        anyhow::bail!("the FileChooser portal backend is supported only on Linux and FreeBSD")
+    }
+}
+
 #[doc(hidden)]
 pub fn run_with_startup_options(
     options: RunOptions,
