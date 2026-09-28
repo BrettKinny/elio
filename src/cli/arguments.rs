@@ -20,6 +20,7 @@ pub(super) enum Action {
     ShellIntegration(ShellIntegrationCommand),
     Portal(PortalCommand),
     PortalChooser(PathBuf),
+    PortalService,
     UserFsHelper,
 }
 
@@ -32,6 +33,7 @@ pub(super) fn parse(args: impl IntoIterator<Item = String>) -> Result<Action> {
 
     match args.as_slice() {
         [arg] if arg == "--internal-user-fs-helper" => return Ok(Action::UserFsHelper),
+        [arg] if arg == "--portal-service" => return Ok(Action::PortalService),
         [arg, socket_flag, socket] if arg == "--portal-chooser" && socket_flag == "--socket" => {
             return Ok(Action::PortalChooser(PathBuf::from(socket)));
         }

@@ -1,5 +1,9 @@
 use serde::Deserialize;
-use std::{ffi::OsString, path::Path};
+use std::{
+    env,
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
@@ -45,6 +49,18 @@ impl TerminalAdapter {
             Self::Gnome => "gnome-terminal",
             Self::Xterm => "xterm",
         }
+    }
+
+    /// Resolve the configured terminal from this service's activation PATH.
+    /// D-Bus activation need not inherit an interactive shell environment.
+    pub fn resolve_executable(self) -> Option<PathBuf> {
+        let name = self.name();
+        env::var_os("PATH")
+            .as_deref()
+            .into_iter()
+            .flat_map(env::split_paths)
+            .map(|directory| directory.join(name))
+            .find(|candidate| candidate.is_file())
     }
 
     /// Build terminal arguments for a portal chooser child. This performs no

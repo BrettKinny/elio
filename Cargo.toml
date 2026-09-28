@@ -82,3 +82,6 @@ assets = [
 # CoreServices (linked in launch_services.rs) provides the Launch Services C API
 # used for app discovery — the same API Finder uses for its "Open With" menu.
 objc2-foundation = { version = "0.3", features = ["NSBundle", "NSFileManager", "NSString", "NSURL"] }
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+zbus = { version = "5.19", default-features = false, features = ["async-io"] }

@@ -60,3 +60,7 @@ pub(crate) fn key_bindings() -> &'static KeyBindings {
 pub(crate) fn open() -> &'static OpenConfig {
     &loading::active_config().open
 }
+
+pub(crate) fn portal_terminal() -> Option<crate::portal::terminal::TerminalAdapter> {
+    loading::active_config().portal.terminal
+}

@@ -377,6 +377,14 @@ impl ServiceCancellation {
         self.sent = true;
         Ok(())
     }
+
+    /// Ends the service side after cancellation so an uncooperative child
+    /// cannot leave the request worker blocked on its terminal result.
+    pub(crate) fn cancel_and_disconnect(&mut self) -> Result<(), ProtocolError> {
+        self.send_cancel()?;
+        self.stream.shutdown(Shutdown::Both)?;
+        Ok(())
+    }
 }
 
 #[cfg(all(unix, any(target_os = "linux", target_os = "freebsd")))]
@@ -813,6 +821,36 @@ mod tests {
             endpoint.accept_until(Instant::now() + Duration::from_millis(15)),
             Err(ProtocolError::Timeout)
         ));
+    }
+
+    #[cfg(all(unix, any(target_os = "linux", target_os = "freebsd")))]
+    #[test]
+    fn ready_handshake_timeout_does_not_block_the_service() {
+        let endpoint = ServiceEndpoint::bind().unwrap();
+        let socket = endpoint.socket_path().to_path_buf();
+        let child = thread::spawn(move || {
+            let _child =
+                ChildEndpoint::connect_until(&socket, Instant::now() + Duration::from_secs(1))
+                    .unwrap();
+            thread::sleep(Duration::from_millis(100));
+        });
+        let mut service = endpoint
+            .accept_until(Instant::now() + Duration::from_secs(1))
+            .unwrap();
+        service
+            .set_timeout(Some(Duration::from_millis(15)))
+            .unwrap();
+        service
+            .send_request(&ChooserRequest {
+                mode: ChooserRequestMode::Open {
+                    kind: SelectionKind::File,
+                    multiple: false,
+                },
+                initial_path: None,
+            })
+            .unwrap();
+        assert!(matches!(service.receive_ready(), Err(ProtocolError::Io(_))));
+        child.join().unwrap();
     }
 
     #[cfg(all(unix, any(target_os = "linux", target_os = "freebsd")))]

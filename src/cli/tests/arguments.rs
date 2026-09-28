@@ -27,6 +27,10 @@ fn standard_actions_are_recognized() {
         parse(["--internal-user-fs-helper".to_string()]).unwrap(),
         Action::UserFsHelper
     ));
+    assert!(matches!(
+        parse(["--portal-service".to_string()]).unwrap(),
+        Action::PortalService
+    ));
 }
 
 #[test]

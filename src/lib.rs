@@ -82,6 +82,19 @@ pub fn run_portal_chooser(socket: PathBuf) -> Result<()> {
     portal::chooser_child::run(&socket)
 }
 
+/// Runs the hidden D-Bus FileChooser portal backend.
+#[doc(hidden)]
+pub fn run_portal_service() -> Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    {
+        portal::service::run()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+    {
+        anyhow::bail!("the FileChooser portal backend is supported only on Linux and FreeBSD")
+    }
+}
+
 #[doc(hidden)]
 pub fn ensure_portal_terminal(
     detect_terminal: impl FnOnce() -> Option<portal::terminal::TerminalAdapter>,
