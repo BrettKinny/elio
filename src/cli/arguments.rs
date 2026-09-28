@@ -1,6 +1,7 @@
 use super::{
     help_output::HelpTopic,
     options::{self, Options},
+    portal::PortalCommand,
     shell_commands::ShellIntegrationCommand,
 };
 use crate::shell_integration::Shell;
@@ -17,7 +18,7 @@ pub(super) enum Action {
     Help(HelpTopic),
     Version,
     ShellIntegration(ShellIntegrationCommand),
-    Portal,
+    Portal(PortalCommand),
     UserFsHelper,
 }
 
@@ -64,7 +65,9 @@ fn parse_portal(args: &[String]) -> Result<Option<Action>> {
         [subcommand, help] if is_portal_subcommand(subcommand) && is_help(help) => {
             Action::Help(HelpTopic::Portal)
         }
-        [subcommand] if is_portal_subcommand(subcommand) => Action::Portal,
+        [subcommand] if subcommand == "enable" => Action::Portal(PortalCommand::Enable),
+        [subcommand] if subcommand == "disable" => Action::Portal(PortalCommand::Disable),
+        [subcommand] if subcommand == "status" => Action::Portal(PortalCommand::Status),
         [_, unexpected, ..] => {
             return Err(unexpected_argument_with_usage(unexpected, PORTAL_USAGE));
         }

@@ -102,15 +102,15 @@ fn shell_integration_commands_are_recognized() {
 fn portal_commands_and_help_topics_are_recognized() {
     assert!(matches!(
         parse(strings(&["portal", "enable"])).unwrap(),
-        Action::Portal
+        Action::Portal(super::PortalCommand::Enable)
     ));
     assert!(matches!(
         parse(strings(&["portal", "disable"])).unwrap(),
-        Action::Portal
+        Action::Portal(super::PortalCommand::Disable)
     ));
     assert!(matches!(
         parse(strings(&["portal", "status"])).unwrap(),
-        Action::Portal
+        Action::Portal(super::PortalCommand::Status)
     ));
     assert!(matches!(
         parse(strings(&["portal", "--help"])).unwrap(),
