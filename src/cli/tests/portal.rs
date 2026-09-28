@@ -1,6 +1,7 @@
-use super::{Terminal, classify_command, detect_terminal_with, enable_with, parse_parent_process};
+use super::{enable_with, parse_parent_process};
+use elio::portal::terminal::{TerminalAdapter, classify_command, detect_with};
 
-fn detect(env: &[(&str, &str)], ancestors: &[&str]) -> Terminal {
+fn detect(env: &[(&str, &str)], ancestors: &[&str]) -> Option<TerminalAdapter> {
     let lookup = |name: &str| {
         env.iter()
             .find_map(|(key, value)| (*key == name).then(|| (*value).to_string()))
@@ -9,7 +10,7 @@ fn detect(env: &[(&str, &str)], ancestors: &[&str]) -> Terminal {
         .iter()
         .map(|value| (*value).to_string())
         .collect::<Vec<_>>();
-    detect_terminal_with(&lookup, &ancestors)
+    detect_with(&lookup, &ancestors)
 }
 
 #[test]
@@ -19,11 +20,11 @@ fn terminal_specific_environment_markers_are_used_without_ancestry() {
             &[("KITTY_WINDOW_ID", "1"), ("TERM_PROGRAM", "WezTerm")],
             &[]
         ),
-        Terminal::Kitty
+        Some(TerminalAdapter::Kitty)
     );
     assert_eq!(
         detect(&[("GNOME_TERMINAL_SCREEN", ":0")], &[]),
-        Terminal::Gnome
+        Some(TerminalAdapter::Gnome)
     );
 }
 
@@ -31,14 +32,23 @@ fn terminal_specific_environment_markers_are_used_without_ancestry() {
 fn term_program_and_term_classify_the_supported_set() {
     assert_eq!(
         detect(&[("TERM_PROGRAM", "ghostty")], &[]),
-        Terminal::Ghostty
+        Some(TerminalAdapter::Ghostty)
     );
-    assert_eq!(detect(&[("TERM", "foot-extra")], &[]), Terminal::Foot);
-    assert_eq!(detect(&[("TERM", "xterm-256color")], &[]), Terminal::Xterm);
-    assert_eq!(detect(&[("TERM", "xterm-rio")], &[]), Terminal::Rio);
+    assert_eq!(
+        detect(&[("TERM", "foot-extra")], &[]),
+        Some(TerminalAdapter::Foot)
+    );
+    assert_eq!(
+        detect(&[("TERM", "xterm-256color")], &[]),
+        Some(TerminalAdapter::Xterm)
+    );
+    assert_eq!(
+        detect(&[("TERM", "xterm-rio")], &[]),
+        Some(TerminalAdapter::Rio)
+    );
     assert_eq!(
         detect(&[("TERM", "xterm-256color")], &["rio"]),
-        Terminal::Rio
+        Some(TerminalAdapter::Rio)
     );
 }
 
@@ -49,23 +59,20 @@ fn nearest_recognized_parent_terminal_takes_priority() {
             &[("TERM", "screen")],
             &["bash", "/usr/bin/gnome-terminal-server"]
         ),
-        Terminal::Gnome
+        Some(TerminalAdapter::Gnome)
     );
     assert_eq!(
         detect(&[("KITTY_WINDOW_ID", "1")], &["bash", "/usr/bin/foot"]),
-        Terminal::Foot
+        Some(TerminalAdapter::Foot)
     );
 }
 
 #[test]
 fn unknown_terminal_stays_unknown() {
-    assert_eq!(
-        detect(&[("TERM", "screen")], &["bash", "tmux"]),
-        Terminal::Unknown
-    );
+    assert_eq!(detect(&[("TERM", "screen")], &["bash", "tmux"]), None);
     assert_eq!(
         classify_command("/usr/bin/wezterm-gui --class elio"),
-        Some(Terminal::WezTerm)
+        Some(TerminalAdapter::WezTerm)
     );
 }
 
@@ -84,12 +91,12 @@ fn enable_is_gated_to_linux_and_freebsd_without_running_detection_elsewhere() {
     }
 
     assert_eq!(
-        enable_with("linux", || Ok(Terminal::Konsole)).unwrap(),
-        Terminal::Konsole
+        enable_with("linux", || Ok(TerminalAdapter::Konsole)).unwrap(),
+        TerminalAdapter::Konsole
     );
     assert_eq!(
-        enable_with("freebsd", || Ok(Terminal::Xterm)).unwrap(),
-        Terminal::Xterm
+        enable_with("freebsd", || Ok(TerminalAdapter::Xterm)).unwrap(),
+        TerminalAdapter::Xterm
     );
 }
 

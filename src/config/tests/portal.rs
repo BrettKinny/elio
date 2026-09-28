@@ -1,5 +1,5 @@
-use super::super::portal::PortalTerminal;
 use super::super::*;
+use crate::portal::terminal::TerminalAdapter;
 use std::{
     fs,
     path::PathBuf,
@@ -17,15 +17,15 @@ fn temp_path(label: &str) -> PathBuf {
 #[test]
 fn portal_terminal_accepts_the_canonical_names() {
     let cases = [
-        ("kitty", PortalTerminal::Kitty),
-        ("ghostty", PortalTerminal::Ghostty),
-        ("foot", PortalTerminal::Foot),
-        ("wezterm", PortalTerminal::WezTerm),
-        ("alacritty", PortalTerminal::Alacritty),
-        ("rio", PortalTerminal::Rio),
-        ("konsole", PortalTerminal::Konsole),
-        ("gnome-terminal", PortalTerminal::Gnome),
-        ("xterm", PortalTerminal::Xterm),
+        ("kitty", TerminalAdapter::Kitty),
+        ("ghostty", TerminalAdapter::Ghostty),
+        ("foot", TerminalAdapter::Foot),
+        ("wezterm", TerminalAdapter::WezTerm),
+        ("alacritty", TerminalAdapter::Alacritty),
+        ("rio", TerminalAdapter::Rio),
+        ("konsole", TerminalAdapter::Konsole),
+        ("gnome-terminal", TerminalAdapter::Gnome),
+        ("xterm", TerminalAdapter::Xterm),
     ];
 
     for (name, terminal) in cases {
@@ -69,7 +69,7 @@ fn existing_portal_terminal_is_not_rewritten_or_detected() {
 
     assert!(matches!(
         result,
-        ConfigurePortalTerminal::Existing(PortalTerminal::Foot)
+        ConfigurePortalTerminal::Existing(TerminalAdapter::Foot)
     ));
     assert_eq!(fs::read_to_string(&path).unwrap(), original);
     fs::remove_dir_all(root).unwrap();
@@ -101,7 +101,7 @@ fn empty_portal_section_inserts_terminal_immediately_after_its_header() {
     fs::create_dir_all(&root).unwrap();
     fs::write(&path, "[portal]\n").unwrap();
 
-    ensure_portal_terminal(&path, || Some(PortalTerminal::Kitty))
+    ensure_portal_terminal(&path, || Some(TerminalAdapter::Kitty))
         .expect("empty portal section should be configured");
 
     assert_eq!(
@@ -120,12 +120,12 @@ fn missing_portal_terminal_is_inserted_without_reformatting_other_config() {
     fs::create_dir_all(&root).unwrap();
     fs::write(&path, original).unwrap();
 
-    let result = ensure_portal_terminal(&path, || Some(PortalTerminal::Kitty))
+    let result = ensure_portal_terminal(&path, || Some(TerminalAdapter::Kitty))
         .expect("terminal should be configured");
 
     assert!(matches!(
         result,
-        ConfigurePortalTerminal::Configured(PortalTerminal::Kitty)
+        ConfigurePortalTerminal::Configured(TerminalAdapter::Kitty)
     ));
     assert_eq!(fs::read_to_string(&path).unwrap(), expected);
     fs::remove_dir_all(root).unwrap();
@@ -144,7 +144,7 @@ fn writable_symlinked_config_updates_its_target_without_replacing_the_link() {
     fs::write(&target, original).unwrap();
     symlink(&target, &path).unwrap();
 
-    ensure_portal_terminal(&path, || Some(PortalTerminal::Kitty))
+    ensure_portal_terminal(&path, || Some(TerminalAdapter::Kitty))
         .expect("a writable symlink target should be configured");
 
     assert_eq!(
@@ -170,12 +170,12 @@ fn missing_portal_section_is_appended_without_reformatting_other_config() {
     fs::create_dir_all(&root).unwrap();
     fs::write(&path, original).unwrap();
 
-    let result = ensure_portal_terminal(&path, || Some(PortalTerminal::Kitty))
+    let result = ensure_portal_terminal(&path, || Some(TerminalAdapter::Kitty))
         .expect("terminal should be configured");
 
     assert!(matches!(
         result,
-        ConfigurePortalTerminal::Configured(PortalTerminal::Kitty)
+        ConfigurePortalTerminal::Configured(TerminalAdapter::Kitty)
     ));
     assert_eq!(fs::read_to_string(&path).unwrap(), expected);
     fs::remove_dir_all(root).unwrap();
@@ -186,12 +186,12 @@ fn missing_config_is_created_with_only_the_portal_terminal() {
     let root = temp_path("new");
     let path = root.join("elio/config.toml");
 
-    let result = ensure_portal_terminal(&path, || Some(PortalTerminal::Rio))
+    let result = ensure_portal_terminal(&path, || Some(TerminalAdapter::Rio))
         .expect("terminal should create config");
 
     assert!(matches!(
         result,
-        ConfigurePortalTerminal::Configured(PortalTerminal::Rio)
+        ConfigurePortalTerminal::Configured(TerminalAdapter::Rio)
     ));
     assert_eq!(
         fs::read_to_string(&path).unwrap(),

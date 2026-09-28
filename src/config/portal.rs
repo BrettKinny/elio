@@ -1,72 +1,26 @@
+use crate::portal::terminal::TerminalAdapter;
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::{fs, path::Path};
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) enum PortalTerminal {
-    Kitty,
-    Ghostty,
-    Foot,
-    #[serde(rename = "wezterm")]
-    WezTerm,
-    Alacritty,
-    Rio,
-    Konsole,
-    #[serde(rename = "gnome-terminal")]
-    Gnome,
-    Xterm,
-}
-
-impl PortalTerminal {
-    pub(crate) fn from_name(name: &str) -> Option<Self> {
-        match name {
-            "kitty" => Some(Self::Kitty),
-            "ghostty" => Some(Self::Ghostty),
-            "foot" => Some(Self::Foot),
-            "wezterm" => Some(Self::WezTerm),
-            "alacritty" => Some(Self::Alacritty),
-            "rio" => Some(Self::Rio),
-            "konsole" => Some(Self::Konsole),
-            "gnome-terminal" => Some(Self::Gnome),
-            "xterm" => Some(Self::Xterm),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn name(self) -> &'static str {
-        match self {
-            Self::Kitty => "kitty",
-            Self::Ghostty => "ghostty",
-            Self::Foot => "foot",
-            Self::WezTerm => "wezterm",
-            Self::Alacritty => "alacritty",
-            Self::Rio => "rio",
-            Self::Konsole => "konsole",
-            Self::Gnome => "gnome-terminal",
-            Self::Xterm => "xterm",
-        }
-    }
-}
-
 #[derive(Default)]
 pub(crate) struct PortalConfig {
-    pub(crate) terminal: Option<PortalTerminal>,
+    pub(crate) terminal: Option<TerminalAdapter>,
 }
 
 #[derive(Deserialize, Default)]
 pub(super) struct PortalConfigOverride {
-    terminal: Option<PortalTerminal>,
+    terminal: Option<TerminalAdapter>,
 }
 
 pub(crate) enum ConfigurePortalTerminal {
-    Existing(PortalTerminal),
-    Configured(PortalTerminal),
+    Existing(TerminalAdapter),
+    Configured(TerminalAdapter),
 }
 
 pub(crate) fn ensure_portal_terminal(
     path: &Path,
-    detect_terminal: impl FnOnce() -> Option<PortalTerminal>,
+    detect_terminal: impl FnOnce() -> Option<TerminalAdapter>,
 ) -> Result<ConfigurePortalTerminal> {
     let contents = match fs::read_to_string(path) {
         Ok(contents) => contents,
@@ -102,7 +56,7 @@ pub(crate) fn ensure_portal_terminal(
     Ok(ConfigurePortalTerminal::Configured(terminal))
 }
 
-fn manual_config_error(path: &Path, terminal: PortalTerminal) -> anyhow::Error {
+fn manual_config_error(path: &Path, terminal: TerminalAdapter) -> anyhow::Error {
     anyhow::anyhow!(
         "error: could not update Elio config {}; add this manually:\n\n[portal]\nterminal = \"{}\"",
         path.display(),
@@ -110,7 +64,7 @@ fn manual_config_error(path: &Path, terminal: PortalTerminal) -> anyhow::Error {
     )
 }
 
-fn insert_terminal(contents: &str, terminal: PortalTerminal) -> String {
+fn insert_terminal(contents: &str, terminal: TerminalAdapter) -> String {
     let assignment = format!("terminal = \"{}\"\n", terminal.name());
     if let Some(portal_start) = table_start(contents, "portal") {
         let section_end = contents[portal_start..]

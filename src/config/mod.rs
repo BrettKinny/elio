@@ -21,7 +21,7 @@ pub(crate) use self::{
     loading::{config_dir, config_path},
     open::{OpenConfig, OpenPlatform, OpenRule, OpenTargetType},
     places::{BuiltinPlace, PlaceEntrySpec, PlacesConfig},
-    portal::{ConfigurePortalTerminal, PortalConfig, PortalTerminal, ensure_portal_terminal},
+    portal::{ConfigurePortalTerminal, PortalConfig, ensure_portal_terminal},
     preview::PreviewConfig,
     ui::UiConfig,
 };
