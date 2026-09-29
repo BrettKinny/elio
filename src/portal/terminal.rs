@@ -66,15 +66,53 @@ impl TerminalAdapter {
     /// Build terminal arguments for a portal chooser child. This performs no
     /// process spawning or executable resolution.
     pub fn chooser_args(self, child: &[OsString]) -> Vec<OsString> {
+        const TITLE: &str = "elio File Chooser";
+        const APP_ID: &str = "io.github.elio_fm.elio.filechooser";
+
         let mut args = match self {
-            Self::Kitty | Self::Foot => Vec::new(),
-            Self::Ghostty => vec!["-e".into()],
-            Self::WezTerm => vec!["start".into(), "--".into()],
-            Self::Alacritty => vec!["--command".into()],
-            Self::Rio => vec!["--command".into()],
-            Self::Konsole => vec!["-e".into()],
-            Self::Gnome => vec!["--".into()],
-            Self::Xterm => vec!["-e".into()],
+            Self::Kitty => vec![
+                "--title".into(),
+                TITLE.into(),
+                "--app-id".into(),
+                APP_ID.into(),
+            ],
+            Self::Ghostty => vec![
+                "--title".into(),
+                TITLE.into(),
+                format!("--class={APP_ID}").into(),
+                "-e".into(),
+            ],
+            Self::Foot => vec![
+                format!("--title={TITLE}").into(),
+                format!("--app-id={APP_ID}").into(),
+            ],
+            Self::WezTerm => vec!["start".into(), "--class".into(), APP_ID.into(), "--".into()],
+            Self::Alacritty => vec![
+                "--title".into(),
+                TITLE.into(),
+                "--class".into(),
+                APP_ID.into(),
+                "--command".into(),
+            ],
+            Self::Rio => vec![
+                "--title-placeholder".into(),
+                TITLE.into(),
+                "--command".into(),
+            ],
+            Self::Konsole => vec!["-p".into(), format!("tabtitle={TITLE}").into(), "-e".into()],
+            Self::Gnome => vec![
+                "--title".into(),
+                TITLE.into(),
+                format!("--class={APP_ID}").into(),
+                "--".into(),
+            ],
+            Self::Xterm => vec![
+                "-T".into(),
+                TITLE.into(),
+                "-class".into(),
+                APP_ID.into(),
+                "-e".into(),
+            ],
         };
         args.extend_from_slice(child);
         args
@@ -182,17 +220,79 @@ mod tests {
     }
 
     #[test]
-    fn chooser_args_use_direct_terminal_argv() {
+    fn chooser_args_give_portal_windows_a_stable_identity() {
         let cases = [
-            (TerminalAdapter::Kitty, &[][..]),
-            (TerminalAdapter::Ghostty, &["-e"][..]),
-            (TerminalAdapter::Foot, &[][..]),
-            (TerminalAdapter::WezTerm, &["start", "--"][..]),
-            (TerminalAdapter::Alacritty, &["--command"][..]),
-            (TerminalAdapter::Rio, &["--command"][..]),
-            (TerminalAdapter::Konsole, &["-e"][..]),
-            (TerminalAdapter::Gnome, &["--"][..]),
-            (TerminalAdapter::Xterm, &["-e"][..]),
+            (
+                TerminalAdapter::Kitty,
+                &[
+                    "--title",
+                    "elio File Chooser",
+                    "--app-id",
+                    "io.github.elio_fm.elio.filechooser",
+                ][..],
+            ),
+            (
+                TerminalAdapter::Ghostty,
+                &[
+                    "--title",
+                    "elio File Chooser",
+                    "--class=io.github.elio_fm.elio.filechooser",
+                    "-e",
+                ][..],
+            ),
+            (
+                TerminalAdapter::Foot,
+                &[
+                    "--title=elio File Chooser",
+                    "--app-id=io.github.elio_fm.elio.filechooser",
+                ][..],
+            ),
+            (
+                TerminalAdapter::WezTerm,
+                &[
+                    "start",
+                    "--class",
+                    "io.github.elio_fm.elio.filechooser",
+                    "--",
+                ][..],
+            ),
+            (
+                TerminalAdapter::Alacritty,
+                &[
+                    "--title",
+                    "elio File Chooser",
+                    "--class",
+                    "io.github.elio_fm.elio.filechooser",
+                    "--command",
+                ][..],
+            ),
+            (
+                TerminalAdapter::Rio,
+                &["--title-placeholder", "elio File Chooser", "--command"][..],
+            ),
+            (
+                TerminalAdapter::Konsole,
+                &["-p", "tabtitle=elio File Chooser", "-e"][..],
+            ),
+            (
+                TerminalAdapter::Gnome,
+                &[
+                    "--title",
+                    "elio File Chooser",
+                    "--class=io.github.elio_fm.elio.filechooser",
+                    "--",
+                ][..],
+            ),
+            (
+                TerminalAdapter::Xterm,
+                &[
+                    "-T",
+                    "elio File Chooser",
+                    "-class",
+                    "io.github.elio_fm.elio.filechooser",
+                    "-e",
+                ][..],
+            ),
         ];
 
         for (terminal, prefix) in cases {
