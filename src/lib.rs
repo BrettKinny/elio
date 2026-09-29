@@ -132,6 +132,19 @@ pub fn enable_portal_routing() -> Result<()> {
     }
 }
 
+/// Restarts the portal frontend so it rereads the effective routing file.
+#[doc(hidden)]
+pub fn reactivate_portal_frontend() -> Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    {
+        portal::frontend::reactivate()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+    {
+        anyhow::bail!("the FileChooser portal backend is supported only on Linux and FreeBSD")
+    }
+}
+
 /// Restores routing only while Elio still owns the FileChooser value.
 #[doc(hidden)]
 pub fn disable_portal_routing() -> Result<bool> {

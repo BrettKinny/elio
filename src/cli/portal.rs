@@ -28,10 +28,14 @@ pub(super) fn execute(command: PortalCommand) -> Result<()> {
             }
             let result = elio::enable_portal_metadata()?;
             elio::enable_portal_routing()?;
+            // Retry frontend replacement even when routing was already set: a
+            // prior invocation can have written it and then failed to refresh.
+            elio::reactivate_portal_frontend()?;
             println!("Portal descriptor: {}", result.portal_path.display());
             println!("D-Bus service: {}", result.service_path.display());
             println!("Portal launcher: {}", result.launcher.display());
             println!("FileChooser routing: elio");
+            println!("Portal frontend reactivated.");
             if !result.created_portal || !result.created_service {
                 println!("Portal metadata was already present and verified.");
             }
@@ -50,6 +54,8 @@ pub(super) fn execute(command: PortalCommand) -> Result<()> {
                     println!("No Elio-owned portal metadata to remove.");
                 }
             }
+            elio::reactivate_portal_frontend()?;
+            println!("Portal frontend reactivated.");
             if restored {
                 println!("Restored FileChooser routing.");
             }
