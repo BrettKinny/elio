@@ -12,6 +12,8 @@ use std::{
     io::{self, Write},
     os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
+    thread,
+    time::{Duration, Instant},
 };
 use zbus::{Connection, Proxy, fdo::DBusProxy};
 
@@ -552,6 +554,128 @@ fn hash(contents: &[u8]) -> String {
     blake3::hash(contents).to_hex().to_string()
 }
 
+const OWNER_HANDOFF_TIMEOUT: Duration = Duration::from_secs(5);
+const OWNER_HANDOFF_POLL_INTERVAL: Duration = Duration::from_millis(50);
+const START_SERVICE_REPLY_SUCCESS: u32 = 1;
+
+#[derive(Debug, Eq, PartialEq)]
+enum OwnerHandoff {
+    Released,
+    StillOwned,
+    UnexpectedOwner(String),
+}
+
+fn classify_owner_handoff(previous: &str, current: Option<&str>) -> OwnerHandoff {
+    match current {
+        None => OwnerHandoff::Released,
+        Some(current) if current == previous => OwnerHandoff::StillOwned,
+        Some(current) => OwnerHandoff::UnexpectedOwner(current.to_string()),
+    }
+}
+
+fn is_new_owner(previous: Option<&str>, current: Option<&str>) -> bool {
+    current.is_some_and(|current| previous != Some(current))
+}
+
+fn service_started(reply: u32) -> bool {
+    reply == START_SERVICE_REPLY_SUCCESS
+}
+
+fn owner_uid_matches(owner_uid: u32, effective_uid: u32) -> bool {
+    owner_uid == effective_uid
+}
+
+fn portal_owner_name(name: &str) -> zbus::names::BusName<'_> {
+    name.try_into().expect("valid D-Bus name")
+}
+
+async fn portal_owner(bus: &DBusProxy<'_>) -> Result<Option<String>> {
+    if !bus
+        .name_has_owner(portal_owner_name(PORTAL_NAME))
+        .await
+        .context("error: could not query the elio portal owner")?
+    {
+        return Ok(None);
+    }
+    Ok(Some(
+        bus.get_name_owner(portal_owner_name(PORTAL_NAME))
+            .await
+            .context("error: could not read the elio portal owner")?
+            .to_string(),
+    ))
+}
+
+async fn stop_current_portal_owner(bus: &DBusProxy<'_>) -> Result<Option<String>> {
+    let Some(owner) = portal_owner(bus).await? else {
+        return Ok(None);
+    };
+    let owner_name = portal_owner_name(&owner);
+    let owner_uid = bus
+        .get_connection_unix_user(owner_name.clone())
+        .await
+        .context("error: could not read the elio portal owner's Unix UID")?;
+    let effective_uid = unsafe { libc::geteuid() };
+    if !owner_uid_matches(owner_uid, effective_uid) {
+        anyhow::bail!(
+            "error: refusing to replace elio portal owner {owner}: Unix UID {owner_uid} does not match effective UID {effective_uid}"
+        )
+    }
+    let pid = bus
+        .get_connection_unix_process_id(owner_name)
+        .await
+        .context("error: could not read the elio portal owner's Unix PID")?;
+    if portal_owner(bus).await?.as_deref() != Some(owner.as_str()) {
+        anyhow::bail!(
+            "error: elio portal owner changed before replacement; rerun `elio portal enable`"
+        )
+    }
+    let pid = libc::pid_t::try_from(pid)
+        .context("error: elio portal owner's Unix PID does not fit pid_t")?;
+    if pid <= 0 {
+        anyhow::bail!("error: elio portal owner reported an invalid Unix PID")
+    }
+    if unsafe { libc::kill(pid, libc::SIGTERM) } != 0 {
+        return Err(io::Error::last_os_error())
+            .context("error: could not SIGTERM the current elio portal owner");
+    }
+    wait_for_owner_release(bus, &owner).await?;
+    Ok(Some(owner))
+}
+
+async fn wait_for_owner_release(bus: &DBusProxy<'_>, previous: &str) -> Result<()> {
+    let deadline = Instant::now() + OWNER_HANDOFF_TIMEOUT;
+    loop {
+        match classify_owner_handoff(previous, portal_owner(bus).await?.as_deref()) {
+            OwnerHandoff::Released => return Ok(()),
+            OwnerHandoff::UnexpectedOwner(owner) => anyhow::bail!(
+                "error: unexpected D-Bus owner {owner} took {PORTAL_NAME} while replacing {previous}"
+            ),
+            OwnerHandoff::StillOwned if Instant::now() >= deadline => anyhow::bail!(
+                "error: elio portal owner {previous} did not release {PORTAL_NAME} within {} seconds after SIGTERM",
+                OWNER_HANDOFF_TIMEOUT.as_secs()
+            ),
+            OwnerHandoff::StillOwned => thread::sleep(OWNER_HANDOFF_POLL_INTERVAL),
+        }
+    }
+}
+
+async fn wait_for_new_owner(bus: &DBusProxy<'_>, previous: Option<&str>) -> Result<String> {
+    let deadline = Instant::now() + OWNER_HANDOFF_TIMEOUT;
+    loop {
+        let owner = portal_owner(bus).await?;
+        if is_new_owner(previous, owner.as_deref()) {
+            return Ok(owner.expect("new owner exists"));
+        }
+        if Instant::now() >= deadline {
+            anyhow::bail!(
+                "error: elio portal service did not acquire a new D-Bus owner within {} seconds",
+                OWNER_HANDOFF_TIMEOUT.as_secs()
+            )
+        }
+        thread::sleep(OWNER_HANDOFF_POLL_INTERVAL);
+    }
+}
+
 fn reload_activate_and_introspect() -> Result<()> {
     zbus::block_on(async {
         let connection = Connection::session()
@@ -561,9 +685,17 @@ fn reload_activate_and_introspect() -> Result<()> {
         bus.reload_config()
             .await
             .context("error: D-Bus ReloadConfig failed")?;
-        bus.start_service_by_name(PORTAL_NAME.try_into().expect("valid D-Bus name"), 0)
+        let previous_owner = stop_current_portal_owner(&bus).await?;
+        let reply = bus
+            .start_service_by_name(PORTAL_NAME.try_into().expect("valid D-Bus name"), 0)
             .await
             .context("error: could not activate elio portal service")?;
+        if !service_started(reply) {
+            anyhow::bail!(
+                "error: elio portal service was already running after replacement; refusing to use an unexpected owner"
+            )
+        }
+        wait_for_new_owner(&bus, previous_owner.as_deref()).await?;
         let proxy = Proxy::new(
             &connection,
             PORTAL_NAME,
@@ -609,6 +741,39 @@ mod tests {
     #[test]
     fn state_hashes_detect_drift() {
         assert_ne!(hash(b"original"), hash(b"modified"));
+    }
+
+    #[test]
+    fn owner_handoff_requires_the_old_owner_to_disappear() {
+        assert_eq!(classify_owner_handoff(":1.4", None), OwnerHandoff::Released);
+        assert_eq!(
+            classify_owner_handoff(":1.4", Some(":1.4")),
+            OwnerHandoff::StillOwned
+        );
+        assert_eq!(
+            classify_owner_handoff(":1.4", Some(":1.9")),
+            OwnerHandoff::UnexpectedOwner(":1.9".to_string())
+        );
+    }
+
+    #[test]
+    fn replacement_owner_must_differ_from_the_previous_owner() {
+        assert!(!is_new_owner(Some(":1.4"), Some(":1.4")));
+        assert!(is_new_owner(Some(":1.4"), Some(":1.9")));
+        assert!(is_new_owner(None, Some(":1.9")));
+        assert!(!is_new_owner(Some(":1.4"), None));
+    }
+
+    #[test]
+    fn activation_must_start_the_service_instead_of_reusing_an_owner() {
+        assert!(service_started(START_SERVICE_REPLY_SUCCESS));
+        assert!(!service_started(2));
+    }
+
+    #[test]
+    fn portal_owner_must_match_the_effective_uid() {
+        assert!(owner_uid_matches(1000, 1000));
+        assert!(!owner_uid_matches(1000, 1001));
     }
 
     #[test]
