@@ -35,8 +35,28 @@ const PORTAL_NAME: &str = "io.github.elio_fm.elio.Portal";
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_OPTIONS: usize = 16;
 const MAX_TEXT_BYTES: usize = 4096;
-const OPEN_OPTIONS: &[&str] = &["modal", "multiple", "directory", "current_folder"];
-const SAVE_OPTIONS: &[&str] = &["modal", "current_folder", "current_name", "current_file"];
+const MAX_FILTERS: usize = 64;
+const MAX_FILTER_RULES: usize = 64;
+const OPEN_OPTIONS: &[&str] = &[
+    "accept_label",
+    "modal",
+    "multiple",
+    "directory",
+    "filters",
+    "current_filter",
+    "current_folder",
+];
+const SAVE_OPTIONS: &[&str] = &[
+    "accept_label",
+    "modal",
+    "filters",
+    "current_filter",
+    "current_folder",
+    "current_name",
+    "current_file",
+];
+
+type Filter = (String, Vec<(u32, String)>);
 
 pub(crate) fn run() -> Result<()> {
     crate::config::initialize(None)?;
@@ -78,7 +98,7 @@ impl FileChooser {
             return failed();
         };
         let Some(initial_path) = option_path(&options, "current_folder") else {
-            return failed_if_present(&options, "current_folder");
+            return failed();
         };
         let Some(directory) = option_bool(&options, "directory") else {
             return failed();
@@ -111,11 +131,8 @@ impl FileChooser {
         if !has_only_options(&options, SAVE_OPTIONS) || !valid_ignored_options(&options) {
             return failed();
         }
-        let Some(initial_path) = option_path(&options, "current_folder") else {
-            return failed_if_present(&options, "current_folder");
-        };
-        let Some(initial_name) = option_string(&options, "current_name") else {
-            return failed_if_present(&options, "current_name");
+        let Some((initial_path, initial_name)) = save_startup(&options) else {
+            return failed();
         };
         self.start_request(
             handle,
@@ -455,7 +472,34 @@ fn option_bool(options: &HashMap<String, OwnedValue>, key: &str) -> Option<bool>
 }
 
 fn valid_ignored_options(options: &HashMap<String, OwnedValue>) -> bool {
-    option_bool(options, "modal").is_some() && option_path(options, "current_file").is_some()
+    option_bool(options, "modal").is_some()
+        && option_string(options, "accept_label").is_some()
+        && option_filters(options, "filters").is_some()
+        && option_filter(options, "current_filter").is_some()
+}
+
+fn option_filters(options: &HashMap<String, OwnedValue>, key: &str) -> Option<()> {
+    let Some(value) = options.get(key) else {
+        return Some(());
+    };
+    let filters = Vec::<Filter>::try_from(value.try_clone().ok()?).ok()?;
+    (filters.len() <= MAX_FILTERS && filters.iter().all(valid_filter)).then_some(())
+}
+
+fn option_filter(options: &HashMap<String, OwnedValue>, key: &str) -> Option<()> {
+    let Some(value) = options.get(key) else {
+        return Some(());
+    };
+    let filter = Filter::try_from(value.try_clone().ok()?).ok()?;
+    valid_filter(&filter).then_some(())
+}
+
+fn valid_filter((name, rules): &Filter) -> bool {
+    name.len() <= MAX_TEXT_BYTES
+        && rules.len() <= MAX_FILTER_RULES
+        && rules
+            .iter()
+            .all(|(kind, value)| matches!(kind, 0 | 1) && value.len() <= MAX_TEXT_BYTES)
 }
 
 fn option_string(options: &HashMap<String, OwnedValue>, key: &str) -> Option<String> {
@@ -479,15 +523,37 @@ fn option_path(options: &HashMap<String, OwnedValue>, key: &str) -> Option<Optio
     (!bytes.contains(&0) && bytes.starts_with(b"/")).then_some(Some(bytes))
 }
 
-fn failed_if_present(
-    options: &HashMap<String, OwnedValue>,
-    key: &str,
-) -> (u32, HashMap<String, OwnedValue>) {
-    if options.contains_key(key) {
-        failed()
+fn save_startup(options: &HashMap<String, OwnedValue>) -> Option<(Option<Vec<u8>>, String)> {
+    let current_folder = option_path(options, "current_folder")?;
+    let current_name = option_string(options, "current_name")?;
+    let current_file = option_path(options, "current_file")?;
+    let current_file_parts = current_file.as_deref().and_then(current_file_parts);
+    let initial_path = current_folder.or_else(|| {
+        current_file_parts
+            .as_ref()
+            .map(|(parent, _)| parent.clone())
+    });
+    let initial_name = if current_name.is_empty() {
+        current_file_parts
+            .and_then(|(_, name)| std::str::from_utf8(name).ok().map(str::to_owned))
+            .unwrap_or_default()
     } else {
-        (2, HashMap::new())
-    }
+        current_name
+    };
+    Some((initial_path, initial_name))
+}
+
+fn current_file_parts(path: &[u8]) -> Option<(Vec<u8>, &[u8])> {
+    let slash = path.iter().rposition(|byte| *byte == b'/')?;
+    let name = path.get(slash + 1..)?;
+    (!name.is_empty()).then(|| {
+        let parent = if slash == 0 {
+            b"/".to_vec()
+        } else {
+            path[..slash].to_vec()
+        };
+        (parent, name)
+    })
 }
 
 fn has_only_options(options: &HashMap<String, OwnedValue>, allowed: &[&str]) -> bool {
@@ -521,11 +587,76 @@ fn cancelled() -> (u32, HashMap<String, OwnedValue>) {
 #[cfg(test)]
 mod tests {
     use super::{
-        ChooserRequest, ChooserRequestMode, Completion, SelectionKind, accepted, file_uri,
-        has_only_options, option_bool, option_path,
+        ChooserRequest, ChooserRequestMode, Completion, OPEN_OPTIONS, SAVE_OPTIONS, SelectionKind,
+        accepted, file_uri, has_only_options, option_bool, option_path, save_startup,
+        valid_ignored_options,
     };
     use std::collections::HashMap;
     use zbus::zvariant::OwnedValue;
+
+    type Filter = (String, Vec<(u32, String)>);
+
+    fn zen_filters() -> Vec<Filter> {
+        vec![
+            (
+                "Images".into(),
+                vec![(1, "image/jpeg".into()), (1, "image/png".into())],
+            ),
+            ("All files".into(), vec![(0, "*".into())]),
+        ]
+    }
+
+    fn zen_open_options() -> HashMap<String, OwnedValue> {
+        let filters = zen_filters();
+        let current_filter = filters[0].clone();
+        HashMap::from([
+            ("modal".into(), OwnedValue::from(true)),
+            ("multiple".into(), OwnedValue::from(true)),
+            (
+                "filters".into(),
+                OwnedValue::try_from(zbus::zvariant::Value::from(filters))
+                    .expect("Zen filter list is a valid D-Bus value"),
+            ),
+            (
+                "current_filter".into(),
+                OwnedValue::try_from(zbus::zvariant::Value::from(current_filter))
+                    .expect("Zen current filter is a valid D-Bus value"),
+            ),
+        ])
+    }
+
+    fn zen_save_options() -> HashMap<String, OwnedValue> {
+        let filters = zen_filters();
+        let current_filter = filters[0].clone();
+        HashMap::from([
+            ("modal".into(), OwnedValue::from(true)),
+            (
+                "accept_label".into(),
+                OwnedValue::try_from(zbus::zvariant::Value::from("Save"))
+                    .expect("Zen accept label is a valid D-Bus value"),
+            ),
+            (
+                "filters".into(),
+                OwnedValue::try_from(zbus::zvariant::Value::from(filters))
+                    .expect("Zen filter list is a valid D-Bus value"),
+            ),
+            (
+                "current_filter".into(),
+                OwnedValue::try_from(zbus::zvariant::Value::from(current_filter))
+                    .expect("Zen current filter is a valid D-Bus value"),
+            ),
+            (
+                "current_folder".into(),
+                OwnedValue::try_from(zbus::zvariant::Value::from(b"/tmp\0".to_vec()))
+                    .expect("Zen current folder is a valid D-Bus value"),
+            ),
+            (
+                "current_name".into(),
+                OwnedValue::try_from(zbus::zvariant::Value::from("download.png"))
+                    .expect("Zen current name is a valid D-Bus value"),
+            ),
+        ])
+    }
 
     #[test]
     fn file_uri_percent_encodes_raw_unix_bytes() {
@@ -542,18 +673,66 @@ mod tests {
     }
 
     #[test]
-    fn semantic_and_unimplemented_options_are_rejected() {
-        let mut options = HashMap::new();
-        options.insert("choices".to_owned(), OwnedValue::from(true));
-        assert!(!has_only_options(&options, &["multiple"]));
-        options.clear();
+    fn zen_open_and_save_option_shapes_are_allowed_and_validated() {
+        let open = zen_open_options();
+        let save = zen_save_options();
+        assert!(has_only_options(&open, OPEN_OPTIONS));
+        assert!(has_only_options(&save, SAVE_OPTIONS));
+        assert!(valid_ignored_options(&open));
+        assert!(valid_ignored_options(&save));
+    }
+
+    #[test]
+    fn ignored_options_require_documented_types_and_bounds() {
+        let mut options = zen_open_options();
+        options.insert("filters".into(), OwnedValue::from(true));
+        assert!(!valid_ignored_options(&options));
+
+        let mut options = zen_save_options();
         options.insert(
-            "accept_label".to_owned(),
-            OwnedValue::try_from(zbus::zvariant::Value::from("Open"))
+            "accept_label".into(),
+            OwnedValue::try_from(zbus::zvariant::Value::from("x".repeat(4097)))
                 .expect("a string is a valid D-Bus value"),
         );
-        assert!(!has_only_options(&options, &["multiple"]));
-        assert!(has_only_options(&HashMap::new(), &["multiple"]));
+        assert!(!valid_ignored_options(&options));
+    }
+
+    #[test]
+    fn current_file_supplies_save_startup_when_more_specific_hints_are_absent() {
+        let mut options = HashMap::new();
+        options.insert(
+            "current_file".into(),
+            OwnedValue::try_from(zbus::zvariant::Value::from(
+                b"/tmp/downloads/report.png\0".to_vec(),
+            ))
+            .expect("current file is a valid D-Bus value"),
+        );
+        assert_eq!(
+            save_startup(&options),
+            Some((Some(b"/tmp/downloads".to_vec()), "report.png".into()))
+        );
+
+        options.insert(
+            "current_folder".into(),
+            OwnedValue::try_from(zbus::zvariant::Value::from(b"/tmp/elsewhere\0".to_vec()))
+                .expect("current folder is a valid D-Bus value"),
+        );
+        options.insert(
+            "current_name".into(),
+            OwnedValue::try_from(zbus::zvariant::Value::from("renamed.png"))
+                .expect("current name is a valid D-Bus value"),
+        );
+        assert_eq!(
+            save_startup(&options),
+            Some((Some(b"/tmp/elsewhere".to_vec()), "renamed.png".into()))
+        );
+    }
+
+    #[test]
+    fn choices_remain_rejected() {
+        let mut options = HashMap::new();
+        options.insert("choices".to_owned(), OwnedValue::from(true));
+        assert!(!has_only_options(&options, OPEN_OPTIONS));
     }
 
     #[test]
