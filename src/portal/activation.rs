@@ -561,6 +561,7 @@ fn hash(contents: &[u8]) -> String {
 
 const OWNER_HANDOFF_TIMEOUT: Duration = Duration::from_secs(5);
 const OWNER_HANDOFF_POLL_INTERVAL: Duration = Duration::from_millis(50);
+const ACTIVATION_METHOD_TIMEOUT: Duration = Duration::from_secs(5);
 const START_SERVICE_REPLY_SUCCESS: u32 = 1;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -594,6 +595,23 @@ fn portal_owner_name(name: &str) -> zbus::names::BusName<'_> {
     name.try_into().expect("valid D-Bus name")
 }
 
+async fn activation_connection(context: &'static str) -> Result<Connection> {
+    zbus::connection::Builder::session()
+        .context(context)?
+        .method_timeout(ACTIVATION_METHOD_TIMEOUT)
+        .build()
+        .await
+        .context(context)
+}
+
+fn get_name_owner_result<T: ToString>(result: zbus::fdo::Result<T>) -> Result<Option<String>> {
+    match result {
+        Ok(owner) => Ok(Some(owner.to_string())),
+        Err(zbus::fdo::Error::NameHasNoOwner(_)) => Ok(None),
+        Err(error) => Err(error).context("error: could not read the elio portal owner"),
+    }
+}
+
 async fn portal_owner(bus: &DBusProxy<'_>) -> Result<Option<String>> {
     if !bus
         .name_has_owner(portal_owner_name(PORTAL_NAME))
@@ -602,19 +620,15 @@ async fn portal_owner(bus: &DBusProxy<'_>) -> Result<Option<String>> {
     {
         return Ok(None);
     }
-    Ok(Some(
-        bus.get_name_owner(portal_owner_name(PORTAL_NAME))
-            .await
-            .context("error: could not read the elio portal owner")?
-            .to_string(),
-    ))
+    get_name_owner_result(bus.get_name_owner(portal_owner_name(PORTAL_NAME)).await)
 }
 
 fn terminate_portal_owner() -> Result<()> {
     zbus::block_on(async {
-        let connection = Connection::session().await.context(
+        let connection = activation_connection(
             "error: could not connect to the session D-Bus to stop the elio portal service",
-        )?;
+        )
+        .await?;
         let bus = DBusProxy::new(&connection).await?;
         terminate_current_portal_owner(&bus).await?;
         Ok(())
@@ -692,11 +706,53 @@ async fn wait_for_new_owner(bus: &DBusProxy<'_>, previous: Option<&str>) -> Resu
     }
 }
 
+fn file_chooser_introspection_timed_out(error: &zbus::fdo::Error) -> bool {
+    matches!(
+        error,
+        zbus::fdo::Error::ZBus(zbus::Error::InputOutput(error))
+            if error.kind() == io::ErrorKind::TimedOut
+    )
+}
+
+fn file_chooser_introspection_result(result: zbus::fdo::Result<String>) -> Result<String> {
+    match result {
+        Ok(xml) => Ok(xml),
+        Err(error) if file_chooser_introspection_timed_out(&error) => anyhow::bail!(
+            "error: FileChooser introspection timed out after {} seconds",
+            ACTIVATION_METHOD_TIMEOUT.as_secs()
+        ),
+        Err(error) => Err(error).context("error: could not introspect elio portal service"),
+    }
+}
+
+fn owner_matches(expected: &str, current: Option<&str>) -> bool {
+    current == Some(expected)
+}
+
+async fn retry_file_chooser_introspection(expected_owner: &str) -> Result<String> {
+    let connection = activation_connection(
+        "error: could not connect to the session D-Bus for FileChooser introspection retry",
+    )
+    .await?;
+    let bus = DBusProxy::new(&connection).await?;
+    let owner = portal_owner(&bus).await?;
+    if !owner_matches(expected_owner, owner.as_deref()) {
+        anyhow::bail!("error: elio portal owner changed before FileChooser introspection retry")
+    }
+    let proxy = Proxy::new(
+        &connection,
+        PORTAL_NAME,
+        PORTAL_PATH,
+        FILE_CHOOSER_INTERFACE,
+    )
+    .await?;
+    file_chooser_introspection_result(proxy.introspect().await)
+}
+
 fn reload_activate_and_introspect() -> Result<()> {
     zbus::block_on(async {
-        let connection = Connection::session()
-            .await
-            .context("error: could not connect to the session D-Bus")?;
+        let connection =
+            activation_connection("error: could not connect to the session D-Bus").await?;
         let bus = DBusProxy::new(&connection).await?;
         bus.reload_config()
             .await
@@ -711,7 +767,7 @@ fn reload_activate_and_introspect() -> Result<()> {
                 "error: elio portal service was already running after replacement; refusing to use an unexpected owner"
             )
         }
-        wait_for_new_owner(&bus, previous_owner.as_deref()).await?;
+        let owner = wait_for_new_owner(&bus, previous_owner.as_deref()).await?;
         let proxy = Proxy::new(
             &connection,
             PORTAL_NAME,
@@ -719,10 +775,15 @@ fn reload_activate_and_introspect() -> Result<()> {
             FILE_CHOOSER_INTERFACE,
         )
         .await?;
-        let xml = proxy
-            .introspect()
-            .await
-            .context("error: could not introspect elio portal service")?;
+        let xml = match proxy.introspect().await {
+            Ok(xml) => xml,
+            Err(error) if file_chooser_introspection_timed_out(&error) => {
+                retry_file_chooser_introspection(&owner).await?
+            }
+            Err(error) => {
+                return Err(error).context("error: could not introspect elio portal service");
+            }
+        };
         if !xml.contains(&format!("interface name=\"{FILE_CHOOSER_INTERFACE}\"")) {
             anyhow::bail!(
                 "error: activated elio portal service does not expose {FILE_CHOOSER_INTERFACE}"
@@ -784,6 +845,45 @@ mod tests {
     fn activation_must_start_the_service_instead_of_reusing_an_owner() {
         assert!(service_started(START_SERVICE_REPLY_SUCCESS));
         assert!(!service_started(2));
+    }
+
+    #[test]
+    fn file_chooser_introspection_timeout_is_clear() {
+        let error = file_chooser_introspection_result(Err(zbus::fdo::Error::ZBus(
+            io::Error::new(io::ErrorKind::TimedOut, "reply timed out").into(),
+        )))
+        .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "error: FileChooser introspection timed out after 5 seconds"
+        );
+    }
+
+    #[test]
+    fn owner_disappearing_between_presence_check_and_read_is_absent() {
+        assert_eq!(
+            get_name_owner_result::<String>(Err(zbus::fdo::Error::NameHasNoOwner(
+                PORTAL_NAME.to_string()
+            )))
+            .unwrap(),
+            None
+        );
+        assert!(
+            get_name_owner_result::<String>(Err(zbus::fdo::Error::Failed(
+                "unavailable".to_string()
+            )))
+            .unwrap_err()
+            .to_string()
+            .contains("could not read the elio portal owner")
+        );
+    }
+
+    #[test]
+    fn introspection_retry_requires_the_activated_owner() {
+        assert!(owner_matches(":1.9", Some(":1.9")));
+        assert!(!owner_matches(":1.9", Some(":1.10")));
+        assert!(!owner_matches(":1.9", None));
     }
 
     #[test]
