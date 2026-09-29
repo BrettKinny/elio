@@ -119,6 +119,58 @@ pub fn enable_portal_metadata() -> Result<portal::activation::EnableResult> {
     }
 }
 
+/// Selects Elio only for the FileChooser portal interface.
+#[doc(hidden)]
+pub fn enable_portal_routing() -> Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    {
+        portal::routing::enable()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+    {
+        anyhow::bail!("the FileChooser portal backend is supported only on Linux and FreeBSD")
+    }
+}
+
+/// Restores routing only while Elio still owns the FileChooser value.
+#[doc(hidden)]
+pub fn disable_portal_routing() -> Result<bool> {
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    {
+        portal::routing::disable()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+    {
+        anyhow::bail!("the FileChooser portal backend is supported only on Linux and FreeBSD")
+    }
+}
+
+/// Reports whether effective FileChooser routing still references Elio.
+#[doc(hidden)]
+pub fn portal_routing_references_elio() -> Result<bool> {
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    {
+        portal::routing::elio_referenced()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+    {
+        anyhow::bail!("the FileChooser portal backend is supported only on Linux and FreeBSD")
+    }
+}
+
+/// Returns the read-only portal routing state.
+#[doc(hidden)]
+pub fn portal_routing_status() -> Result<(Option<PathBuf>, Option<String>, &'static str)> {
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    {
+        portal::routing::status()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+    {
+        anyhow::bail!("the FileChooser portal backend is supported only on Linux and FreeBSD")
+    }
+}
+
 /// Removes metadata that Elio can prove it created and still owns.
 #[doc(hidden)]
 pub fn disable_portal_metadata() -> Result<portal::activation::DisableResult> {

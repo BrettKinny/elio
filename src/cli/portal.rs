@@ -27,26 +27,46 @@ pub(super) fn execute(command: PortalCommand) -> Result<()> {
                 println!("Portal terminal is already configured: {terminal}");
             }
             let result = elio::enable_portal_metadata()?;
+            elio::enable_portal_routing()?;
             println!("Portal descriptor: {}", result.portal_path.display());
             println!("D-Bus service: {}", result.service_path.display());
             println!("Portal launcher: {}", result.launcher.display());
+            println!("FileChooser routing: elio");
             if !result.created_portal || !result.created_service {
                 println!("Portal metadata was already present and verified.");
             }
         }
         PortalCommand::Disable => {
-            let result = elio::disable_portal_metadata()?;
-            if result.removed_portal || result.removed_service {
-                println!("Removed Elio-owned portal metadata.");
+            let restored = elio::disable_portal_routing()?;
+            if elio::portal_routing_references_elio()? {
+                println!(
+                    "Kept Elio portal metadata: effective FileChooser routing still references elio."
+                );
             } else {
-                println!("No Elio-owned portal metadata to remove.");
+                let result = elio::disable_portal_metadata()?;
+                if result.removed_portal || result.removed_service {
+                    println!("Removed Elio-owned portal metadata.");
+                } else {
+                    println!("No Elio-owned portal metadata to remove.");
+                }
+            }
+            if restored {
+                println!("Restored FileChooser routing.");
             }
         }
         PortalCommand::Status => {
             let status = elio::portal_metadata_status()?;
+            let (effective, value, state) = elio::portal_routing_status()?;
             println!("elio FileChooser portal metadata: {}", status.state);
             println!("Portal descriptor: {}", status.portal_path.display());
             println!("D-Bus service: {}", status.service_path.display());
+            println!("Portal routing: {state}");
+            if let Some(path) = effective {
+                println!("Portal config: {}", path.display());
+            }
+            if let Some(value) = value {
+                println!("FileChooser: {value}");
+            }
         }
     }
     Ok(())
