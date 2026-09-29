@@ -140,7 +140,11 @@ pub(crate) fn enable() -> Result<EnableResult> {
 
 pub(crate) fn disable() -> Result<DisableResult> {
     let paths = Paths::from_environment()?;
-    let Some(mut state) = load_state(&paths)? else {
+    disable_at(&paths, terminate_portal_owner)
+}
+
+fn disable_at(paths: &Paths, terminate: impl FnOnce() -> Result<()>) -> Result<DisableResult> {
+    let Some(mut state) = load_state(paths)? else {
         return Ok(DisableResult {
             removed_portal: false,
             removed_service: false,
@@ -151,15 +155,16 @@ pub(crate) fn disable() -> Result<DisableResult> {
             "error: portal metadata update is incomplete; rerun `elio portal enable` to recover it"
         )
     }
+    terminate()?;
     let resuming_removal = state.phase == Phase::Removing;
     state.phase = Phase::Removing;
-    write_state(&paths, &state)?;
+    write_state(paths, &state)?;
     let removed_service = remove_owned(&state.service, resuming_removal)?;
     state.service.created = false;
-    write_state(&paths, &state)?;
+    write_state(paths, &state)?;
     let removed_portal = remove_owned(&state.portal, resuming_removal)?;
     state.portal.created = false;
-    write_state(&paths, &state)?;
+    write_state(paths, &state)?;
     remove_file_if_regular_owned(&paths.state)?;
     Ok(DisableResult {
         removed_portal,
@@ -605,7 +610,18 @@ async fn portal_owner(bus: &DBusProxy<'_>) -> Result<Option<String>> {
     ))
 }
 
-async fn stop_current_portal_owner(bus: &DBusProxy<'_>) -> Result<Option<String>> {
+fn terminate_portal_owner() -> Result<()> {
+    zbus::block_on(async {
+        let connection = Connection::session().await.context(
+            "error: could not connect to the session D-Bus to stop the elio portal service",
+        )?;
+        let bus = DBusProxy::new(&connection).await?;
+        terminate_current_portal_owner(&bus).await?;
+        Ok(())
+    })
+}
+
+async fn terminate_current_portal_owner(bus: &DBusProxy<'_>) -> Result<Option<String>> {
     let Some(owner) = portal_owner(bus).await? else {
         return Ok(None);
     };
@@ -685,7 +701,7 @@ fn reload_activate_and_introspect() -> Result<()> {
         bus.reload_config()
             .await
             .context("error: D-Bus ReloadConfig failed")?;
-        let previous_owner = stop_current_portal_owner(&bus).await?;
+        let previous_owner = terminate_current_portal_owner(&bus).await?;
         let reply = bus
             .start_service_by_name(PORTAL_NAME.try_into().expect("valid D-Bus name"), 0)
             .await
@@ -814,6 +830,38 @@ mod tests {
     }
 
     #[test]
+    fn disable_terminates_the_backend_before_removing_owned_metadata() {
+        let root = temporary_root("disable-order");
+        let paths = owned_paths(&root);
+        let mut backend_terminated = false;
+        let result = disable_at(&paths, || {
+            assert!(paths.portal.is_file());
+            assert!(paths.service.is_file());
+            backend_terminated = true;
+            Ok(())
+        })
+        .unwrap();
+        assert!(backend_terminated);
+        assert!(result.removed_portal);
+        assert!(result.removed_service);
+        assert!(!paths.portal.exists());
+        assert!(!paths.service.exists());
+        assert!(!paths.state.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn failed_backend_termination_preserves_owned_metadata_for_retry() {
+        let root = temporary_root("disable-termination-failure");
+        let paths = owned_paths(&root);
+        assert!(disable_at(&paths, || anyhow::bail!("backend persists")).is_err());
+        assert_eq!(load_state(&paths).unwrap().unwrap().phase, Phase::Committed);
+        assert!(paths.portal.is_file());
+        assert!(paths.service.is_file());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn modified_owned_artifact_is_never_removed() {
         let root = temporary_root("remove");
         let path = root.join("elio.portal");
@@ -857,6 +905,41 @@ mod tests {
         assert!(!remove_owned(&artifact, true).unwrap());
         assert!(remove_owned(&artifact, false).is_err());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    fn owned_paths(root: &Path) -> Paths {
+        let paths = Paths {
+            portal: root.join("portal/elio.portal"),
+            service: root.join("service/elio.service"),
+            state: root.join("state/portal-metadata.json"),
+        };
+        let portal = b"portal metadata";
+        let service = b"service metadata";
+        fs::create_dir_all(paths.portal.parent().unwrap()).unwrap();
+        fs::create_dir_all(paths.service.parent().unwrap()).unwrap();
+        fs::write(&paths.portal, portal).unwrap();
+        fs::write(&paths.service, service).unwrap();
+        write_state(
+            &paths,
+            &MetadataState {
+                version: STATE_VERSION,
+                phase: Phase::Committed,
+                launcher: PathBuf::from("/usr/local/bin/elio"),
+                resolved_executable: PathBuf::from("/usr/local/bin/elio"),
+                portal: ArtifactState {
+                    path: paths.portal.clone(),
+                    hash: hash(portal),
+                    created: true,
+                },
+                service: ArtifactState {
+                    path: paths.service.clone(),
+                    hash: hash(service),
+                    created: true,
+                },
+            },
+        )
+        .unwrap();
+        paths
     }
 
     fn temporary_root(label: &str) -> PathBuf {
