@@ -18,6 +18,7 @@ fn portal_save_file_submits_through_existing_save_as_flow() {
     app.enable_portal_chooser_mode(PortalChooserMode::SaveFile {
         initial_name: "report.txt".into(),
     });
+    assert_eq!(app.status, "Save as mode");
 
     app.confirm_chooser();
     key(&mut app, KeyCode::Enter);
@@ -26,6 +27,22 @@ fn portal_save_file_submits_through_existing_save_as_flow() {
         app.take_chooser_exit(),
         Some(ChooserExit::Confirmed(vec![root.join("report.txt")]))
     );
+    cleanup_app_temp_root(app, root);
+}
+
+#[test]
+fn portal_open_mode_uses_chooser_status_with_external_cancellation() {
+    let root = temp_path("portal-open-status");
+    let mut app = App::new_at(root.clone()).unwrap();
+    app.enable_portal_chooser_mode_with_cancellation(
+        PortalChooserMode::Open {
+            kind: PortalSelectionKind::File,
+            multiple: false,
+        },
+        Default::default(),
+    );
+
+    assert_eq!(app.status, "Chooser mode");
     cleanup_app_temp_root(app, root);
 }
 

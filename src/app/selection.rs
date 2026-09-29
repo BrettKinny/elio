@@ -74,7 +74,7 @@ impl App {
         &mut self,
         mode: crate::chooser::portal::PortalChooserMode,
     ) -> crate::chooser::portal::ExternalCancellation {
-        self.status = "Chooser mode".to_string();
+        self.status = mode.status_message().to_string();
         self.chooser.enable_portal(mode)
     }
     pub(crate) fn enable_portal_chooser_mode_with_cancellation(
@@ -82,7 +82,7 @@ impl App {
         mode: crate::chooser::portal::PortalChooserMode,
         cancellation: crate::chooser::portal::ExternalCancellation,
     ) {
-        self.status = "Chooser mode".to_string();
+        self.status = mode.status_message().to_string();
         self.chooser
             .enable_portal_with_cancellation(mode, cancellation);
     }

@@ -25,6 +25,15 @@ pub(crate) enum PortalChooserMode {
     },
 }
 
+impl PortalChooserMode {
+    pub(crate) const fn status_message(&self) -> &'static str {
+        match self {
+            Self::Open { .. } => "Chooser mode",
+            Self::SaveFile { .. } => "Save as mode",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ExternalCancellation(Arc<AtomicU8>);
 
