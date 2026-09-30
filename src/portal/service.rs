@@ -740,7 +740,7 @@ mod tests {
         let root = env!("CARGO_MANIFEST_DIR").as_bytes().to_vec();
         let paths = [
             [root.clone(), b"/Cargo.toml".to_vec()].concat(),
-            [root, b"/README.md".to_vec()].concat(),
+            [root, b"/src/portal/service.rs".to_vec()].concat(),
         ];
         let multiple = ChooserRequest {
             mode: ChooserRequestMode::Open {
