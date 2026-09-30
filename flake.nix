@@ -28,7 +28,10 @@
       );
 
       checks = forAllSystems (system: {
-        inherit (self.packages.${system}) elio;
+        elio-tests = self.packages.${system}.elio.overrideAttrs (_: {
+          # Tests mutate process-wide environment variables across several modules.
+          doCheck = true;
+        });
       });
     };
 }

@@ -53,8 +53,9 @@ rustPlatform.buildRustPackage {
     ffmpeg
   ] ++ lib.optionals stdenv.hostPlatform.isLinux [ procps ];
 
-  # Tests mutate process-wide environment variables across several modules.
-  doCheck = true;
+  # Keep installation builds focused on compilation. The complete test suite is
+  # exposed separately as checks.<system>.elio-tests in flake.nix.
+  doCheck = false;
   checkFlags = [ "--test-threads=1" ] ++ lib.optionals stdenv.hostPlatform.isDarwin [
     # These integration tests need Finder and a user session unavailable to the
     # Nix builder. They remain enabled in ordinary macOS CI.
