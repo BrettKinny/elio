@@ -118,9 +118,12 @@ impl App {
             return;
         }
         let cwd = self.file_browser.cwd.clone();
-        let focused_path = (!self.chooser.selects_current_directory_when_unmarked())
-            .then(|| self.selected_entry().map(|entry| entry.path.clone()))
-            .flatten();
+        let focused_path = self
+            .selected_entry()
+            .filter(|entry| {
+                !self.chooser.selects_current_directory_when_unmarked() || entry.is_dir()
+            })
+            .map(|entry| entry.path.clone());
         let selected_paths = self.selected_paths_sorted();
         if self
             .chooser
