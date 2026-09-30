@@ -83,6 +83,12 @@ fn help_prints_usage() {
         )
     );
     assert!(stdout.contains("Supported shells: bash, zsh, fish, nu"));
+    assert!(stdout.contains("Portal integration:"));
+    assert!(stdout.contains("elio portal enable              Enable XDG FileChooser portal integration"));
+    assert!(
+        stdout.contains("elio portal status              Show XDG FileChooser portal integration status")
+    );
+    assert!(stdout.contains("elio portal disable             Disable XDG FileChooser portal integration"));
     assert!(stdout.contains("CLI documentation: https://elio-fm.github.io/docs/cli/"));
     assert!(!stdout.contains(env!("CARGO_PKG_VERSION")));
     assert!(!stdout.contains("\x1b["));
