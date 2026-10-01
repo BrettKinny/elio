@@ -18,6 +18,11 @@ const MODE: u32 = 0o600;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct State {
+    records: Vec<Record>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct Record {
     phase: Phase,
     logical: PathBuf,
     target: PathBuf,
@@ -67,7 +72,14 @@ pub(crate) fn status() -> Result<(Option<PathBuf>, Option<String>, &'static str)
         .flatten();
     let state = match state(&paths.state)? {
         None => "disabled",
-        Some(record) if record.phase == Phase::Committed => "managed",
+        Some(state)
+            if state
+                .records
+                .iter()
+                .all(|record| record.phase == Phase::Committed) =>
+        {
+            "managed"
+        }
         Some(_) => "recovery required",
     };
     Ok((effective, value, state))
@@ -88,14 +100,14 @@ fn enable_at(paths: &Paths) -> Result<()> {
     let _lock = Lock::new(&paths.state)?;
     let target = target(paths)?;
     reconcile(paths)?;
-    if let Some(record) = state(&paths.state)? {
-        if record.logical != target.logical {
-            anyhow::bail!(
-                "error: portal routing is already managed for {}; disable it before selecting {}",
-                record.logical.display(),
-                target.logical.display()
-            )
-        }
+    let mut state = state(&paths.state)?.unwrap_or(State {
+        records: Vec::new(),
+    });
+    if let Some(record) = state
+        .records
+        .iter()
+        .find(|record| record.logical == target.logical)
+    {
         let (current, _) = owned(&record.target)?;
         if hash(&current) == record.after || value(&current)?.as_deref() == Some("elio") {
             return Ok(());
@@ -112,11 +124,11 @@ fn enable_at(paths: &Paths) -> Result<()> {
     let (after, previous) = replace(&before, "elio")?;
     if previous.as_deref() == Some("elio") {
         anyhow::bail!(
-            "error: {} already selects elio but is not managed by Elio",
+            "error: {} already selects elio but is not managed by elio",
             target.logical.display()
         )
     }
-    let record = State {
+    let record = Record {
         phase: Phase::Prepared,
         logical: target.logical,
         target: target.target,
@@ -125,7 +137,8 @@ fn enable_at(paths: &Paths) -> Result<()> {
         before: hash(&before),
         after: hash(&after),
     };
-    write_state(&paths.state, &record)?;
+    state.records.push(record.clone());
+    write_state(&paths.state, &state)?;
     atomic_checked(
         &record.target,
         after.as_bytes(),
@@ -142,8 +155,18 @@ fn enable_at(paths: &Paths) -> Result<()> {
     write_state(
         &paths.state,
         &State {
-            phase: Phase::Committed,
-            ..record
+            records: state
+                .records
+                .into_iter()
+                .map(|saved| Record {
+                    phase: if saved.logical == record.logical {
+                        Phase::Committed
+                    } else {
+                        saved.phase
+                    },
+                    ..saved
+                })
+                .collect(),
         },
     )
 }
@@ -151,62 +174,83 @@ fn enable_at(paths: &Paths) -> Result<()> {
 fn disable_at(paths: &Paths) -> Result<bool> {
     let _lock = Lock::new(&paths.state)?;
     reconcile(paths)?;
-    let Some(record) = state(&paths.state)? else {
+    let Some(state) = state(&paths.state)? else {
         return Ok(false);
     };
-    let (current, _) = match owned(&record.target) {
-        Ok(current) => current,
-        Err(error) if is_missing(&error) => {
-            remove_state(&paths.state)?;
-            return Ok(false);
+    let mut restored_any = false;
+    for record in state.records {
+        let (current, _) = match owned(&record.target) {
+            Ok(current) => current,
+            Err(error) if is_missing(&error) => continue,
+            Err(error) => return Err(error),
+        };
+        if value(&current)?.as_deref() != Some("elio") {
+            continue;
         }
-        Err(error) => return Err(error),
-    };
-    if value(&current)?.as_deref() != Some("elio") {
-        remove_state(&paths.state)?;
-        return Ok(false);
-    }
-    if record.created && hash(&current) == record.after {
-        recheck(&record.target, Expected::Hash(&hash(&current)))?;
-        fs::remove_file(&record.target)
-            .with_context(|| format!("error: failed to remove {}", record.target.display()))?;
-    } else {
-        let restored = restore(&current, record.previous.as_deref())?;
-        atomic_checked(
-            &record.target,
-            restored.as_bytes(),
-            mode(&record.target)?,
-            Expected::Hash(&hash(&current)),
-        )?;
+        if record.created && hash(&current) == record.after {
+            recheck(&record.target, Expected::Hash(&hash(&current)))?;
+            fs::remove_file(&record.target)
+                .with_context(|| format!("error: failed to remove {}", record.target.display()))?;
+        } else {
+            let restored = restore(&current, record.previous.as_deref())?;
+            atomic_checked(
+                &record.target,
+                restored.as_bytes(),
+                mode(&record.target)?,
+                Expected::Hash(&hash(&current)),
+            )?;
+        }
+        restored_any = true;
     }
     remove_state(&paths.state)?;
-    Ok(true)
+    Ok(restored_any)
 }
 
 fn reconcile(paths: &Paths) -> Result<()> {
-    let Some(record) = state(&paths.state)? else {
+    let Some(mut state) = state(&paths.state)? else {
         return Ok(());
     };
-    if record.phase == Phase::Committed {
-        return Ok(());
+    let mut changed = false;
+    let mut discard = Vec::with_capacity(state.records.len());
+    for record in &mut state.records {
+        if record.phase == Phase::Committed {
+            discard.push(false);
+            continue;
+        }
+        let current = match owned(&record.target) {
+            Ok((text, _)) => Some(hash(&text)),
+            Err(error) if record.created && is_missing(&error) => {
+                changed = true;
+                discard.push(true);
+                continue;
+            }
+            Err(_) => None,
+        };
+        if current.as_deref() == Some(&record.before) {
+            changed = true;
+            discard.push(true);
+        } else if current.as_deref() == Some(&record.after) {
+            record.phase = Phase::Committed;
+            changed = true;
+            discard.push(false);
+        } else {
+            anyhow::bail!(
+                "error: incomplete portal routing update; target changed, refusing recovery"
+            )
+        }
     }
-    let current = match owned(&record.target) {
-        Ok((text, _)) => Some(hash(&text)),
-        Err(error) if record.created && is_missing(&error) => return remove_state(&paths.state),
-        Err(_) => None,
-    };
-    if current.as_deref() == Some(&record.before) {
+    state.records = state
+        .records
+        .into_iter()
+        .zip(discard)
+        .filter_map(|(record, discard)| (!discard).then_some(record))
+        .collect();
+    if state.records.is_empty() {
         remove_state(&paths.state)
-    } else if current.as_deref() == Some(&record.after) {
-        write_state(
-            &paths.state,
-            &State {
-                phase: Phase::Committed,
-                ..record
-            },
-        )
+    } else if changed {
+        write_state(&paths.state, &state)
     } else {
-        anyhow::bail!("error: incomplete portal routing update; target changed, refusing recovery")
+        Ok(())
     }
 }
 
@@ -473,12 +517,24 @@ fn rewrite(line: &str, value: &str) -> String {
 
 fn state(path: &Path) -> Result<Option<State>> {
     match fs::read(path) {
-        Ok(bytes) => Ok(Some(
-            serde_json::from_slice(&bytes).context("error: invalid portal routing state")?,
-        )),
+        Ok(bytes) => {
+            match serde_json::from_slice(&bytes).context("error: invalid portal routing state")? {
+                StoredState::Current(state) => Ok(Some(state)),
+                StoredState::Legacy(record) => Ok(Some(State {
+                    records: vec![record],
+                })),
+            }
+        }
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error.into()),
     }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum StoredState {
+    Current(State),
+    Legacy(Record),
 }
 fn write_state(path: &Path, state: &State) -> Result<()> {
     atomic(path, &serde_json::to_vec(state)?, MODE)
@@ -836,6 +892,162 @@ mod tests {
     }
 
     #[test]
+    fn enabling_hyprland_does_not_change_gnome_routing() {
+        let root = root("hyprland-only");
+        let gnome = paths(&root, &["gnome"]);
+        let hyprland = paths(&root, &["hyprland"]);
+        let gnome_before =
+            "[preferred]\ndefault=gtk\norg.freedesktop.impl.portal.FileChooser=gtk\n";
+        let gnome_file = config(&root, "config", "gnome-portals.conf", gnome_before);
+        let hyprland_file = config(
+            &root,
+            "config",
+            "hyprland-portals.conf",
+            "[preferred]\ndefault=hyprland\norg.freedesktop.impl.portal.FileChooser=gtk\n",
+        );
+
+        enable_at(&hyprland).unwrap();
+
+        assert_eq!(source(&gnome_file).unwrap(), gnome_before);
+        assert!(source(&hyprland_file).unwrap().contains("FileChooser=elio"));
+        assert_eq!(state(&gnome.state).unwrap().unwrap().records.len(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn enabling_gnome_does_not_change_hyprland_routing() {
+        let root = root("gnome-only");
+        let gnome = paths(&root, &["gnome"]);
+        let hyprland = paths(&root, &["hyprland"]);
+        let hyprland_before =
+            "[preferred]\ndefault=hyprland\norg.freedesktop.impl.portal.FileChooser=gtk\n";
+        let gnome_file = config(
+            &root,
+            "config",
+            "gnome-portals.conf",
+            "[preferred]\ndefault=gtk\norg.freedesktop.impl.portal.FileChooser=gtk\n",
+        );
+        let hyprland_file = config(&root, "config", "hyprland-portals.conf", hyprland_before);
+
+        enable_at(&gnome).unwrap();
+
+        assert!(source(&gnome_file).unwrap().contains("FileChooser=elio"));
+        assert_eq!(source(&hyprland_file).unwrap(), hyprland_before);
+        assert_eq!(state(&hyprland.state).unwrap().unwrap().records.len(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn enabling_multiple_desktops_keeps_each_owned_route() {
+        let root = root("multiple-enable");
+        let gnome = paths(&root, &["gnome"]);
+        let hyprland = paths(&root, &["hyprland"]);
+        let gnome_file = config(
+            &root,
+            "config",
+            "gnome-portals.conf",
+            "[preferred]\ndefault=gtk\norg.freedesktop.impl.portal.FileChooser=gtk\n",
+        );
+        let hyprland_file = config(
+            &root,
+            "config",
+            "hyprland-portals.conf",
+            "[preferred]\ndefault=hyprland\norg.freedesktop.impl.portal.FileChooser=gtk\n",
+        );
+
+        enable_at(&gnome).unwrap();
+        let enabled_gnome = source(&gnome_file).unwrap();
+        let gnome_record = state(&gnome.state).unwrap().unwrap().records.remove(0);
+        enable_at(&hyprland).unwrap();
+
+        let state = state(&gnome.state).unwrap().unwrap();
+        assert_eq!(source(&gnome_file).unwrap(), enabled_gnome);
+        assert!(source(&hyprland_file).unwrap().contains("FileChooser=elio"));
+        assert_eq!(state.records.len(), 2);
+        let saved_gnome = state
+            .records
+            .iter()
+            .find(|record| record.logical == gnome_record.logical)
+            .unwrap();
+        assert_eq!(saved_gnome.target, gnome_record.target);
+        assert_eq!(saved_gnome.before, gnome_record.before);
+        assert_eq!(saved_gnome.after, gnome_record.after);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn disabling_multiple_desktops_restores_each_original_route() {
+        let root = root("multiple-disable");
+        let gnome = paths(&root, &["gnome"]);
+        let hyprland = paths(&root, &["hyprland"]);
+        let gnome_before =
+            "[preferred]\ndefault=gtk\norg.freedesktop.impl.portal.FileChooser=gtk\n";
+        let hyprland_before =
+            "[preferred]\ndefault=hyprland\norg.freedesktop.impl.portal.FileChooser=gtk\n";
+        let gnome_file = config(&root, "config", "gnome-portals.conf", gnome_before);
+        let hyprland_file = config(&root, "config", "hyprland-portals.conf", hyprland_before);
+
+        enable_at(&gnome).unwrap();
+        enable_at(&hyprland).unwrap();
+        assert!(disable_at(&hyprland).unwrap());
+
+        assert_eq!(source(&gnome_file).unwrap(), gnome_before);
+        assert_eq!(source(&hyprland_file).unwrap(), hyprland_before);
+        assert!(state(&gnome.state).unwrap().is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn disabling_multiple_desktops_preserves_a_user_modified_route() {
+        let root = root("multiple-ownership");
+        let gnome = paths(&root, &["gnome"]);
+        let hyprland = paths(&root, &["hyprland"]);
+        let hyprland_before =
+            "[preferred]\ndefault=hyprland\norg.freedesktop.impl.portal.FileChooser=gtk\n";
+        let gnome_file = config(
+            &root,
+            "config",
+            "gnome-portals.conf",
+            "[preferred]\ndefault=gtk\norg.freedesktop.impl.portal.FileChooser=gtk\n",
+        );
+        let hyprland_file = config(&root, "config", "hyprland-portals.conf", hyprland_before);
+
+        enable_at(&gnome).unwrap();
+        enable_at(&hyprland).unwrap();
+        let user_choice = "[preferred]\ndefault=gtk\norg.freedesktop.impl.portal.FileChooser=kde\n";
+        fs::write(&gnome_file, user_choice).unwrap();
+
+        assert!(disable_at(&hyprland).unwrap());
+
+        assert_eq!(source(&gnome_file).unwrap(), user_choice);
+        assert_eq!(source(&hyprland_file).unwrap(), hyprland_before);
+        assert!(state(&gnome.state).unwrap().is_none());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn reads_the_previous_single_route_state_format() {
+        let root = root("legacy-state");
+        let paths = paths(&root, &["hyprland"]);
+        let record = Record {
+            phase: Phase::Committed,
+            logical: root.join("config/xdg-desktop-portal/hyprland-portals.conf"),
+            target: root.join("config/xdg-desktop-portal/hyprland-portals.conf"),
+            created: false,
+            previous: Some("gtk".to_string()),
+            before: hash("before"),
+            after: hash("after"),
+        };
+        fs::create_dir_all(paths.state.parent().unwrap()).unwrap();
+        fs::write(&paths.state, serde_json::to_vec(&record).unwrap()).unwrap();
+
+        let state = state(&paths.state).unwrap().unwrap();
+        assert_eq!(state.records.len(), 1);
+        assert_eq!(state.records[0].logical, record.logical);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn prepared_created_target_missing_is_discarded() {
         let root = root("prepared-missing");
         let paths = paths(&root, &["hyprland"]);
@@ -851,15 +1063,17 @@ mod tests {
         write_state(
             &paths.state,
             &State {
-                phase: Phase::Prepared,
-                logical,
-                target,
-                created: true,
-                previous: None,
-                before: hash(""),
-                after: hash(
-                    "[preferred]\ndefault=gtk\norg.freedesktop.impl.portal.FileChooser=elio\n",
-                ),
+                records: vec![Record {
+                    phase: Phase::Prepared,
+                    logical,
+                    target,
+                    created: true,
+                    previous: None,
+                    before: hash(""),
+                    after: hash(
+                        "[preferred]\ndefault=gtk\norg.freedesktop.impl.portal.FileChooser=elio\n",
+                    ),
+                }],
             },
         )
         .unwrap();

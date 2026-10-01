@@ -99,7 +99,7 @@ pub fn run_portal_service() -> Result<()> {
 pub fn ensure_portal_terminal(
     detect_terminal: impl FnOnce() -> Option<portal::terminal::TerminalAdapter>,
 ) -> Result<(bool, &'static str)> {
-    let path = config::config_path().context("error: could not determine the Elio config path")?;
+    let path = config::config_path().context("error: could not determine the elio config path")?;
     match config::ensure_portal_terminal(&path, detect_terminal)? {
         config::ConfigurePortalTerminal::Existing(terminal) => Ok((false, terminal.name())),
         config::ConfigurePortalTerminal::Configured(terminal) => Ok((true, terminal.name())),
@@ -119,7 +119,7 @@ pub fn enable_portal_metadata() -> Result<portal::activation::EnableResult> {
     }
 }
 
-/// Selects Elio only for the FileChooser portal interface.
+/// Selects elio only for the FileChooser portal interface.
 #[doc(hidden)]
 pub fn enable_portal_routing() -> Result<()> {
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
@@ -145,7 +145,7 @@ pub fn reactivate_portal_frontend() -> Result<()> {
     }
 }
 
-/// Restores routing only while Elio still owns the FileChooser value.
+/// Restores every routing entry while elio still owns its FileChooser value.
 #[doc(hidden)]
 pub fn disable_portal_routing() -> Result<bool> {
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
@@ -158,7 +158,7 @@ pub fn disable_portal_routing() -> Result<bool> {
     }
 }
 
-/// Reports whether effective FileChooser routing still references Elio.
+/// Reports whether effective FileChooser routing still references elio.
 #[doc(hidden)]
 pub fn portal_routing_references_elio() -> Result<bool> {
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
@@ -184,7 +184,7 @@ pub fn portal_routing_status() -> Result<(Option<PathBuf>, Option<String>, &'sta
     }
 }
 
-/// Removes metadata that Elio can prove it created and still owns.
+/// Removes metadata that elio can prove it created and still owns.
 #[doc(hidden)]
 pub fn disable_portal_metadata() -> Result<portal::activation::DisableResult> {
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
