@@ -13,3 +13,6 @@ pub(crate) mod frontend;
 pub(crate) mod routing;
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub(crate) mod service;
+
+#[cfg(test)]
+mod tests;
