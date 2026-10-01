@@ -14,19 +14,20 @@ Snappy, batteries-included terminal file manager with rich previews, inline imag
 ## Features
 
 - **Three-pane layout** — Places, Files, and Preview side by side
-- **Rich previews** — text, code, documents, archives, media, and more; see [Preview Coverage](#preview-coverage)
-- **Archive management** — extract and create common archive formats
-- **Inline images** — rendered directly in supported terminals
-- **Customizable Places and devices** — pinned folders plus auto-detected drives and mounts
+- **Grid and list views** — switch with `v`, zoom the grid with `Ctrl++` / `Ctrl+-`
+- **Keyboard and mouse navigation** — browse comfortably either way
+- **Customizable places and devices** — pinned folders and auto-detected drives and mounts
 - **Quick actions** — Go-to, Open With, and copy-to-clipboard
 - **Trash management** — trash, restore, or permanently delete files
-- **Keyboard and mouse navigation** — browse comfortably either way
-- **Kitty drag and drop** — drop files into elio and drag them out in Kitty 0.47+
-- **Grid and list views** — switch with `v`, zoom the grid with `Ctrl++` / `Ctrl+-`
-- **Fuzzy find** — find folders and files quickly
 - **Duplicate Finder** — find and safely manage files with identical contents
+- **Rich previews** — text, code, documents, archives, media, and more; see [Preview Coverage](#preview-coverage)
+- **Inline images** — rendered directly in supported terminals
+- **Archive management** — extract and create common archive formats
+- **Fuzzy find** — find folders and files quickly
 - **Zoxide jumps** — jump to frequent directories from your zoxide history
+- **Kitty drag and drop** — drop files into elio and drag them out in Kitty 0.47+
 - **Shell integration** — install cd-on-exit wrappers for bash, zsh, fish, and Nushell
+- **File chooser** — use elio as the file chooser on Linux and FreeBSD
 - **Theming** — full palette and file-class control via `theme.toml`
 
 ---
@@ -197,7 +198,7 @@ Opening files with terminal apps works normally inside SSH sessions. Desktop app
 
 ---
 
-## Change Directory on Quit
+## Shell Integration
 
 elio can leave your shell in the directory you were browsing when you quit:
 
@@ -209,6 +210,21 @@ Restart your shell, then run `elio` normally. Press `q` to quit and move your sh
 
 See the shell integration docs for uninstall steps, supported shells, and manual setup:
 https://elio-fm.github.io/docs/shell-integration/
+
+---
+
+## File Chooser
+
+You can make elio your file chooser on Linux and FreeBSD:
+
+```bash
+elio portal enable
+```
+
+This sets elio as the file chooser for your current desktop environment or window manager. Use `elio portal disable` to restore the previous file chooser, or `elio portal status` to check the current configuration.
+
+See the file chooser docs for setup details and supported behavior:
+https://elio-fm.github.io/docs/file-chooser/
 
 ---
 

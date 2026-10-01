@@ -49,6 +49,7 @@ A brief overview of the repository layout:
 │   ├── input_handling/         # Keyboard, mouse, paste, and wheel interaction handling
 │   ├── opening/                # Open rules, application launching, and Open With discovery
 │   ├── places/                 # Places list and mounted-device discovery
+│   ├── portal/                 # XDG Desktop Portal FileChooser integration and routing
 │   ├── preview/                # Preview construction and format-specific processing
 │   ├── shell_integration/      # Shell scripts and install/uninstall support
 │   ├── terminal_images/        # Terminal detection, image protocols, placement, and geometry

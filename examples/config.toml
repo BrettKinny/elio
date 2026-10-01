@@ -11,7 +11,7 @@
 # [preview]
 # tab_width = 4  # tab-stop width in columns for text/code previews (1–16, clamped)
 
-# Terminal used by elio's portal integration.
+# Terminal used by elio's file chooser portal.
 # `elio portal enable` detects and sets this automatically when possible.
 # Supported values: kitty, ghostty, foot, wezterm, alacritty, rio, konsole,
 # gnome-terminal, xterm.
