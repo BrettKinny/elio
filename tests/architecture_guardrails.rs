@@ -135,6 +135,11 @@ fn chooser_does_not_depend_on_app() {
 }
 
 #[test]
+fn portal_does_not_depend_on_app() {
+    assert_tree_has_no_pattern("src/portal", "app::", &[]);
+}
+
+#[test]
 fn app_does_not_depend_on_ui() {
     assert_tree_has_no_pattern("src/app", "crate::ui::", &[]);
 }

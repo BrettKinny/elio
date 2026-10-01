@@ -12,6 +12,9 @@ This crate is organized around focused subsystems.
   trashing, restoring, or archiving items.
 - `background_jobs`: shared job scheduling, workers, requests, and result messages.
 - `chooser`: chooser-mode selection, confirmed or cancelled outcome, and selected-path output.
+- `portal`: XDG Desktop Portal FileChooser integration on Linux and FreeBSD, including backend
+  activation metadata, desktop-specific routing, frontend refresh, D-Bus service handling, and
+  private chooser transport.
 - `fuzzy_finder` and `duplicate_finder`: feature state and behavior for finding items.
 - `goto_menu`: configured Go To entries and destination resolution.
 - `places`: configured places and mounted-device discovery.
@@ -45,6 +48,9 @@ Current boundary rules:
   background jobs, navigation, and side effects.
 - Chooser selection resolution and output belong to `chooser`; `app` only supplies the current
   browser selection and coordinates application exit.
+- `portal` owns XDG portal lifecycle, routing, D-Bus protocol handling, and private chooser
+  transport. It reuses `chooser` for selection semantics and `terminal_runtime` for the chooser
+  UI; it should not depend on `app`.
 - Top-level startup orchestration initializes `config` and `theme` before handing control to
   `terminal_runtime`.
 - Raw Crossterm and Kitty input acquisition belongs to `terminal_runtime`; mapping those events to
