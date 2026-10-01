@@ -61,6 +61,7 @@ pub(crate) fn open() -> &'static OpenConfig {
     &loading::active_config().open
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub(crate) fn portal_terminal() -> Option<crate::portal::terminal::TerminalAdapter> {
     loading::active_config().portal.terminal
 }

@@ -50,6 +50,7 @@ enum ChooserLaunch {
     None,
     Choose,
     SaveAs(crate::chooser::SaveAsStartup),
+    #[cfg(all(unix, any(target_os = "linux", target_os = "freebsd")))]
     Portal {
         mode: crate::chooser::portal::PortalChooserMode,
         cancellation: crate::chooser::portal::ExternalCancellation,
@@ -347,15 +348,6 @@ pub(crate) fn run_portal_chooser(
         .ok_or_else(|| anyhow::anyhow!("portal chooser exited without a result"))
 }
 
-#[cfg(not(all(unix, any(target_os = "linux", target_os = "freebsd"))))]
-pub(crate) fn run_portal_chooser(
-    _: crate::chooser::portal::PortalChooserMode,
-    _: Option<PathBuf>,
-    _: crate::chooser::portal::ExternalCancellation,
-) -> Result<ChooserExit> {
-    anyhow::bail!("portal chooser sockets are only supported on Linux and FreeBSD")
-}
-
 fn run_open_command_in_terminal(
     program: &str,
     args: &[String],
@@ -449,6 +441,7 @@ fn run_app(
 
     let cwd = match &chooser_launch {
         ChooserLaunch::SaveAs(startup) => Some(startup.directory.clone()),
+        #[cfg(all(unix, any(target_os = "linux", target_os = "freebsd")))]
         ChooserLaunch::Portal { cwd, .. } => cwd.clone(),
         _ => cwd,
     };
@@ -461,6 +454,7 @@ fn run_app(
             app.enable_save_as_mode(startup.name);
         }
         ChooserLaunch::Choose => app.enable_chooser_mode(),
+        #[cfg(all(unix, any(target_os = "linux", target_os = "freebsd")))]
         ChooserLaunch::Portal {
             mode, cancellation, ..
         } => app.enable_portal_chooser_mode_with_cancellation(mode, cancellation),

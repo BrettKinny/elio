@@ -1,11 +1,13 @@
 use anyhow::Result;
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 use elio::portal::terminal::{self, TerminalAdapter};
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 use std::env;
 
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 use std::process::Command;
 
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 const MAX_PARENT_PROCESSES: usize = 6;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -15,6 +17,7 @@ pub(super) enum PortalCommand {
     Status,
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 pub(super) fn execute(command: PortalCommand) -> Result<()> {
     match command {
         PortalCommand::Enable => {
@@ -80,6 +83,12 @@ pub(super) fn execute(command: PortalCommand) -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+pub(super) fn execute(_: PortalCommand) -> Result<()> {
+    anyhow::bail!("error: `elio portal` is only supported on Linux and FreeBSD")
+}
+
+#[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
 fn routing_summary(state: elio::PortalRoutingState) -> Vec<String> {
     match state {
         elio::PortalRoutingState::Disabled => vec!["Portal routing: disabled".to_string()],
@@ -110,6 +119,7 @@ fn routing_summary(state: elio::PortalRoutingState) -> Vec<String> {
     }
 }
 
+#[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
 fn enable_with<T>(platform: &str, enable: impl FnOnce() -> Result<T>) -> Result<T> {
     if !matches!(platform, "linux" | "freebsd") {
         anyhow::bail!("error: `elio portal enable` is only supported on Linux and FreeBSD")
@@ -117,15 +127,17 @@ fn enable_with<T>(platform: &str, enable: impl FnOnce() -> Result<T>) -> Result<
     enable()
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 fn detect_current_terminal() -> Option<TerminalAdapter> {
     terminal::detect_with(&real_env_lookup, &parent_commands())
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 fn real_env_lookup(name: &str) -> Option<String> {
     env::var_os(name).map(|value| value.to_string_lossy().into_owned())
 }
 
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 fn parent_commands() -> Vec<String> {
     // This is a best-effort signal that takes precedence over inherited terminal
     // environment. A missing or incompatible `ps` yields no ancestry.
@@ -144,12 +156,7 @@ fn parent_commands() -> Vec<String> {
     commands
 }
 
-#[cfg(not(unix))]
-fn parent_commands() -> Vec<String> {
-    Vec::new()
-}
-
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 fn parent_process(pid: &str) -> Option<(String, String)> {
     let output = Command::new("ps")
         .args(["-p", pid, "-o", "ppid=", "-o", "comm="])
@@ -162,7 +169,7 @@ fn parent_process(pid: &str) -> Option<(String, String)> {
     parse_parent_process(&output)
 }
 
-#[cfg(any(unix, test))]
+#[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
 fn parse_parent_process(output: &str) -> Option<(String, String)> {
     let mut fields = output.split_whitespace();
     Some((fields.next()?.to_string(), fields.next()?.to_string()))

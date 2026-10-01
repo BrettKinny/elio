@@ -77,6 +77,7 @@ impl App {
         self.status = mode.status_message().to_string();
         self.chooser.enable_portal(mode)
     }
+    #[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
     pub(crate) fn enable_portal_chooser_mode_with_cancellation(
         &mut self,
         mode: crate::chooser::portal::PortalChooserMode,

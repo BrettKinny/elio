@@ -2,6 +2,21 @@ use super::{enable_with, parse_parent_process, routing_summary};
 use elio::portal::terminal::{TerminalAdapter, classify_command, detect_with};
 use elio::{ManagedPortalDesktop, PortalRoutingState};
 
+#[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
+#[test]
+fn portal_commands_are_rejected_on_unsupported_platforms() {
+    for command in [
+        super::PortalCommand::Enable,
+        super::PortalCommand::Disable,
+        super::PortalCommand::Status,
+    ] {
+        assert_eq!(
+            super::execute(command).unwrap_err().to_string(),
+            "error: `elio portal` is only supported on Linux and FreeBSD"
+        );
+    }
+}
+
 #[test]
 fn routing_summary_lists_managed_desktops_compactly() {
     assert_eq!(
