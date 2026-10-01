@@ -62,20 +62,52 @@ pub(super) fn execute(command: PortalCommand) -> Result<()> {
         }
         PortalCommand::Status => {
             let status = elio::portal_metadata_status()?;
-            let (effective, value, state) = elio::portal_routing_status()?;
+            let routing = elio::portal_routing_status()?;
             println!("elio FileChooser portal metadata: {}", status.state);
             println!("Portal descriptor: {}", status.portal_path.display());
             println!("D-Bus service: {}", status.service_path.display());
-            println!("Portal routing: {state}");
-            if let Some(path) = effective {
+            for line in routing_summary(routing.state) {
+                println!("{line}");
+            }
+            if let Some(path) = routing.effective {
                 println!("Portal config: {}", path.display());
             }
-            if let Some(value) = value {
+            if let Some(value) = routing.value {
                 println!("FileChooser: {value}");
             }
         }
     }
     Ok(())
+}
+
+fn routing_summary(state: elio::PortalRoutingState) -> Vec<String> {
+    match state {
+        elio::PortalRoutingState::Disabled => vec!["Portal routing: disabled".to_string()],
+        elio::PortalRoutingState::RecoveryRequired => {
+            vec!["Portal routing: recovery required".to_string()]
+        }
+        elio::PortalRoutingState::Managed(desktops) => {
+            let desktop_specific = desktops.iter().all(|desktop| desktop.desktop_specific);
+            let noun = if desktop_specific {
+                "desktop"
+            } else {
+                "configuration"
+            };
+            let mut lines = vec![format!(
+                "Portal routing: enabled for {} {noun}{}",
+                desktops.len(),
+                if desktops.len() == 1 { "" } else { "s" },
+            )];
+            lines.extend(desktops.into_iter().map(|desktop| {
+                format!(
+                    "  • {}{}",
+                    desktop.name,
+                    if desktop.current { " (current)" } else { "" },
+                )
+            }));
+            lines
+        }
+    }
 }
 
 fn enable_with<T>(platform: &str, enable: impl FnOnce() -> Result<T>) -> Result<T> {

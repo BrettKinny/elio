@@ -26,6 +26,7 @@ struct Record {
     phase: Phase,
     logical: PathBuf,
     target: PathBuf,
+    desktop: Option<String>,
     created: bool,
     previous: Option<String>,
     before: String,
@@ -43,14 +44,38 @@ struct Paths {
     config_home: PathBuf,
     state: PathBuf,
     search: Vec<PathBuf>,
-    desktops: Vec<String>,
+    desktops: Vec<Desktop>,
+}
+#[derive(Clone, Debug)]
+struct Desktop {
+    id: String,
+    identifier: String,
 }
 #[derive(Debug)]
 struct Target {
     logical: PathBuf,
     target: PathBuf,
     source: Option<PathBuf>,
+    desktop: Option<String>,
     created: bool,
+}
+
+pub(crate) struct Status {
+    pub(crate) effective: Option<PathBuf>,
+    pub(crate) value: Option<String>,
+    pub(crate) state: StatusState,
+}
+
+pub(crate) enum StatusState {
+    Disabled,
+    Managed(Vec<ManagedDesktop>),
+    RecoveryRequired,
+}
+
+pub(crate) struct ManagedDesktop {
+    pub(crate) name: String,
+    pub(crate) current: bool,
+    pub(crate) desktop_specific: bool,
 }
 
 pub(crate) fn enable() -> Result<()> {
@@ -60,9 +85,13 @@ pub(crate) fn disable() -> Result<bool> {
     disable_at(&Paths::from_env()?)
 }
 
-pub(crate) fn status() -> Result<(Option<PathBuf>, Option<String>, &'static str)> {
+pub(crate) fn status() -> Result<Status> {
     let paths = Paths::from_env()?;
-    let effective = effective(&paths)?;
+    status_at(&paths)
+}
+
+fn status_at(paths: &Paths) -> Result<Status> {
+    let effective = effective(paths)?;
     let value = effective
         .as_ref()
         .map(|path| source(path))
@@ -71,18 +100,35 @@ pub(crate) fn status() -> Result<(Option<PathBuf>, Option<String>, &'static str)
         .transpose()?
         .flatten();
     let state = match state(&paths.state)? {
-        None => "disabled",
+        None => StatusState::Disabled,
         Some(state)
             if state
                 .records
                 .iter()
                 .all(|record| record.phase == Phase::Committed) =>
         {
-            "managed"
+            StatusState::Managed(
+                state
+                    .records
+                    .iter()
+                    .map(|record| ManagedDesktop {
+                        name: record
+                            .desktop
+                            .clone()
+                            .unwrap_or_else(|| "Default portal configuration".to_string()),
+                        current: effective.as_ref() == Some(&record.logical),
+                        desktop_specific: record.desktop.is_some(),
+                    })
+                    .collect(),
+            )
         }
-        Some(_) => "recovery required",
+        Some(_) => StatusState::RecoveryRequired,
     };
-    Ok((effective, value, state))
+    Ok(Status {
+        effective,
+        value,
+        state,
+    })
 }
 
 /// Tests the effective explicit FileChooser route, falling back to `default`.
@@ -132,6 +178,7 @@ fn enable_at(paths: &Paths) -> Result<()> {
         phase: Phase::Prepared,
         logical: target.logical,
         target: target.target,
+        desktop: target.desktop,
         created: target.created,
         previous,
         before: hash(&before),
@@ -288,7 +335,10 @@ impl Paths {
                     && part
                         .bytes()
                         .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'))
-                .then(|| part.to_ascii_lowercase())
+                .then(|| Desktop {
+                    id: part.to_ascii_lowercase(),
+                    identifier: part.to_string(),
+                })
             })
             .collect();
         Ok(Self {
@@ -326,6 +376,7 @@ fn target(paths: &Paths) -> Result<Target> {
                     .unwrap_or_else(|| "portals.conf".to_string()),
             )
         });
+    let desktop = desktop_for_config(&paths.desktops, &name);
     let logical = paths.config_home.join("xdg-desktop-portal").join(name);
     match fs::symlink_metadata(&logical) {
         Ok(meta) if meta.file_type().is_symlink() => {
@@ -346,6 +397,7 @@ fn target(paths: &Paths) -> Result<Target> {
                 logical,
                 source: Some(target.clone()),
                 target,
+                desktop,
                 created: false,
             })
         }
@@ -355,6 +407,7 @@ fn target(paths: &Paths) -> Result<Target> {
                 logical: logical.clone(),
                 source: Some(logical.clone()),
                 target: logical,
+                desktop,
                 created: false,
             })
         }
@@ -362,18 +415,34 @@ fn target(paths: &Paths) -> Result<Target> {
             logical: logical.clone(),
             target: logical,
             source: source_path,
+            desktop,
             created: true,
         }),
         Err(error) => Err(error.into()),
     }
 }
 
-fn names(desktops: &[String]) -> Vec<String> {
+fn names(desktops: &[Desktop]) -> Vec<String> {
     desktops
         .iter()
-        .map(|desktop| format!("{desktop}-portals.conf"))
+        .map(|desktop| format!("{}-portals.conf", desktop.id))
         .chain(std::iter::once("portals.conf".to_string()))
         .collect()
+}
+
+fn desktop_for_config(desktops: &[Desktop], name: &Path) -> Option<String> {
+    let name = name.to_string_lossy();
+    desktops
+        .iter()
+        .find(|desktop| name == format!("{}-portals.conf", desktop.id))
+        .map(|desktop| desktop.identifier.clone())
+}
+
+fn desktop_id_from_config(path: &Path) -> Option<&str> {
+    path.file_name()?
+        .to_str()?
+        .strip_suffix("-portals.conf")
+        .filter(|name| !name.is_empty())
 }
 
 fn source(path: &Path) -> Result<String> {
@@ -522,23 +591,34 @@ fn rewrite(line: &str, value: &str) -> String {
 fn state(path: &Path) -> Result<Option<State>> {
     match fs::read(path) {
         Ok(bytes) => {
-            match serde_json::from_slice(&bytes).context("error: invalid portal routing state")? {
-                StoredState::Current(state) => Ok(Some(state)),
-                StoredState::Legacy(record) => Ok(Some(State {
-                    records: vec![record],
-                })),
-            }
+            let state =
+                serde_json::from_slice(&bytes).context("error: invalid portal routing state")?;
+            validate_state(&state)?;
+            Ok(Some(state))
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error.into()),
     }
 }
 
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum StoredState {
-    Current(State),
-    Legacy(Record),
+fn validate_state(state: &State) -> Result<()> {
+    for record in &state.records {
+        match (
+            desktop_id_from_config(&record.logical),
+            record.desktop.as_deref(),
+        ) {
+            (Some(config_desktop), Some(desktop))
+                if config_desktop == desktop.to_ascii_lowercase() => {}
+            (Some(_), _) => anyhow::bail!(
+                "error: desktop-specific portal routing record is missing its matching desktop identifier"
+            ),
+            (None, None) => {}
+            (None, Some(_)) => anyhow::bail!(
+                "error: generic portal routing record must not contain a desktop identifier"
+            ),
+        }
+    }
+    Ok(())
 }
 fn write_state(path: &Path, state: &State) -> Result<()> {
     atomic(path, &serde_json::to_vec(state)?, MODE)

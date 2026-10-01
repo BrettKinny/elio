@@ -20,7 +20,13 @@ fn paths(root: &Path, desktops: &[&str]) -> Paths {
         config_home: config_home.clone(),
         state: root.join("state/elio/portal-routing.json"),
         search: vec![config_home, root.join("etc"), root.join("share")],
-        desktops: desktops.iter().map(|name| name.to_string()).collect(),
+        desktops: desktops
+            .iter()
+            .map(|name| Desktop {
+                id: name.to_ascii_lowercase(),
+                identifier: (*name).to_string(),
+            })
+            .collect(),
     }
 }
 fn config(root: &Path, base: &str, name: &str, text: &str) -> PathBuf {
@@ -310,28 +316,6 @@ fn disabling_multiple_desktops_preserves_a_user_modified_route() {
 }
 
 #[test]
-fn reads_the_previous_single_route_state_format() {
-    let root = root("legacy-state");
-    let paths = paths(&root, &["hyprland"]);
-    let record = Record {
-        phase: Phase::Committed,
-        logical: root.join("config/xdg-desktop-portal/hyprland-portals.conf"),
-        target: root.join("config/xdg-desktop-portal/hyprland-portals.conf"),
-        created: false,
-        previous: Some("gtk".to_string()),
-        before: hash("before"),
-        after: hash("after"),
-    };
-    fs::create_dir_all(paths.state.parent().unwrap()).unwrap();
-    fs::write(&paths.state, serde_json::to_vec(&record).unwrap()).unwrap();
-
-    let state = state(&paths.state).unwrap().unwrap();
-    assert_eq!(state.records.len(), 1);
-    assert_eq!(state.records[0].logical, record.logical);
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
 fn prepared_created_target_missing_is_discarded() {
     let root = root("prepared-missing");
     let paths = paths(&root, &["hyprland"]);
@@ -351,6 +335,7 @@ fn prepared_created_target_missing_is_discarded() {
                 phase: Phase::Prepared,
                 logical,
                 target,
+                desktop: Some("hyprland".to_string()),
                 created: true,
                 previous: None,
                 before: hash(""),
@@ -363,6 +348,40 @@ fn prepared_created_target_missing_is_discarded() {
     .unwrap();
     reconcile(&paths).unwrap();
     assert!(state(&paths.state).unwrap().is_none());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn desktop_specific_records_require_a_matching_desktop_identifier() {
+    let root = root("missing-desktop-identifier");
+    let paths = paths(&root, &["GNOME"]);
+    let logical = root.join("config/xdg-desktop-portal/gnome-portals.conf");
+    let routing_state = State {
+        records: vec![Record {
+            phase: Phase::Committed,
+            logical: logical.clone(),
+            target: logical,
+            desktop: None,
+            created: false,
+            previous: Some("gtk".to_string()),
+            before: hash("before"),
+            after: hash("after"),
+        }],
+    };
+    fs::create_dir_all(paths.state.parent().unwrap()).unwrap();
+    let mut stored = serde_json::to_value(&routing_state).unwrap();
+    stored["records"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("desktop");
+    fs::write(&paths.state, serde_json::to_vec(&stored).unwrap()).unwrap();
+
+    assert!(
+        state(&paths.state)
+            .unwrap_err()
+            .to_string()
+            .contains("missing its matching desktop identifier")
+    );
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -393,4 +412,131 @@ fn semicolon_values_are_preserved_for_metadata_decision() {
         default("[preferred]\ndefault=gtk;elio\n").unwrap(),
         Some("gtk;elio".to_string())
     );
+}
+
+fn managed(status: Status) -> Vec<ManagedDesktop> {
+    match status.state {
+        StatusState::Managed(desktops) => desktops,
+        _ => panic!("expected managed portal routing"),
+    }
+}
+
+#[test]
+fn status_lists_one_managed_desktop_and_marks_it_current() {
+    let root = root("status-one");
+    let paths = paths(&root, &["Hyprland"]);
+    config(
+        &root,
+        "config",
+        "hyprland-portals.conf",
+        "[preferred]\norg.freedesktop.impl.portal.FileChooser=gtk\n",
+    );
+
+    enable_at(&paths).unwrap();
+    let desktops = managed(status_at(&paths).unwrap());
+
+    assert_eq!(desktops.len(), 1);
+    assert_eq!(desktops[0].name, "Hyprland");
+    assert!(desktops[0].current);
+    assert!(desktops[0].desktop_specific);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn status_lists_multiple_managed_desktops() {
+    let root = root("status-multiple");
+    let gnome = paths(&root, &["GNOME"]);
+    let hyprland = paths(&root, &["Hyprland"]);
+    config(
+        &root,
+        "config",
+        "gnome-portals.conf",
+        "[preferred]\norg.freedesktop.impl.portal.FileChooser=gtk\n",
+    );
+    config(
+        &root,
+        "config",
+        "hyprland-portals.conf",
+        "[preferred]\norg.freedesktop.impl.portal.FileChooser=gtk\n",
+    );
+
+    enable_at(&gnome).unwrap();
+    enable_at(&hyprland).unwrap();
+    let desktops = managed(status_at(&hyprland).unwrap());
+
+    assert_eq!(desktops.len(), 2);
+    assert_eq!(desktops[0].name, "GNOME");
+    assert!(!desktops[0].current);
+    assert_eq!(desktops[1].name, "Hyprland");
+    assert!(desktops[1].current);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn status_does_not_mark_a_managed_desktop_current_when_another_is_active() {
+    let root = root("status-current-unmanaged");
+    let hyprland = paths(&root, &["Hyprland"]);
+    let gnome = paths(&root, &["GNOME"]);
+    config(
+        &root,
+        "config",
+        "hyprland-portals.conf",
+        "[preferred]\norg.freedesktop.impl.portal.FileChooser=gtk\n",
+    );
+    config(
+        &root,
+        "config",
+        "gnome-portals.conf",
+        "[preferred]\norg.freedesktop.impl.portal.FileChooser=gtk\n",
+    );
+
+    enable_at(&hyprland).unwrap();
+    let status = status_at(&gnome).unwrap();
+    let desktops = managed(status);
+
+    assert_eq!(desktops.len(), 1);
+    assert_eq!(desktops[0].name, "Hyprland");
+    assert!(!desktops[0].current);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn status_uses_the_matching_identifier_from_a_multi_desktop_session() {
+    let root = root("status-multi-value");
+    let paths = paths(&root, &["Budgie", "GNOME"]);
+    config(
+        &root,
+        "config",
+        "budgie-portals.conf",
+        "[preferred]\norg.freedesktop.impl.portal.FileChooser=gtk\n",
+    );
+
+    enable_at(&paths).unwrap();
+    let desktops = managed(status_at(&paths).unwrap());
+
+    assert_eq!(desktops.len(), 1);
+    assert_eq!(desktops[0].name, "Budgie");
+    assert!(desktops[0].current);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn status_reports_a_managed_generic_portals_config() {
+    let root = root("status-generic");
+    let paths = paths(&root, &[]);
+    config(
+        &root,
+        "config",
+        "portals.conf",
+        "[preferred]\norg.freedesktop.impl.portal.FileChooser=gtk\n",
+    );
+
+    enable_at(&paths).unwrap();
+    let desktops = managed(status_at(&paths).unwrap());
+
+    assert_eq!(desktops.len(), 1);
+    assert_eq!(desktops[0].name, "Default portal configuration");
+    assert!(desktops[0].current);
+    assert!(!desktops[0].desktop_specific);
+    fs::remove_dir_all(root).unwrap();
 }

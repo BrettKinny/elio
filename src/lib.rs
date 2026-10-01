@@ -32,6 +32,27 @@ mod ui;
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 
+#[doc(hidden)]
+pub struct PortalRoutingStatus {
+    pub effective: Option<PathBuf>,
+    pub value: Option<String>,
+    pub state: PortalRoutingState,
+}
+
+#[doc(hidden)]
+pub enum PortalRoutingState {
+    Disabled,
+    Managed(Vec<ManagedPortalDesktop>),
+    RecoveryRequired,
+}
+
+#[doc(hidden)]
+pub struct ManagedPortalDesktop {
+    pub name: String,
+    pub current: bool,
+    pub desktop_specific: bool,
+}
+
 #[derive(Debug, Default)]
 #[doc(hidden)]
 pub struct RunOptions {
@@ -173,10 +194,29 @@ pub fn portal_routing_references_elio() -> Result<bool> {
 
 /// Returns the read-only portal routing state.
 #[doc(hidden)]
-pub fn portal_routing_status() -> Result<(Option<PathBuf>, Option<String>, &'static str)> {
+pub fn portal_routing_status() -> Result<PortalRoutingStatus> {
     #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     {
-        portal::routing::status()
+        let status = portal::routing::status()?;
+        let state = match status.state {
+            portal::routing::StatusState::Disabled => PortalRoutingState::Disabled,
+            portal::routing::StatusState::RecoveryRequired => PortalRoutingState::RecoveryRequired,
+            portal::routing::StatusState::Managed(desktops) => PortalRoutingState::Managed(
+                desktops
+                    .into_iter()
+                    .map(|desktop| ManagedPortalDesktop {
+                        name: desktop.name,
+                        current: desktop.current,
+                        desktop_specific: desktop.desktop_specific,
+                    })
+                    .collect(),
+            ),
+        };
+        Ok(PortalRoutingStatus {
+            effective: status.effective,
+            value: status.value,
+            state,
+        })
     }
     #[cfg(not(any(target_os = "linux", target_os = "freebsd")))]
     {

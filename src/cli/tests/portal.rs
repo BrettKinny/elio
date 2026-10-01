@@ -1,5 +1,29 @@
-use super::{enable_with, parse_parent_process};
+use super::{enable_with, parse_parent_process, routing_summary};
 use elio::portal::terminal::{TerminalAdapter, classify_command, detect_with};
+use elio::{ManagedPortalDesktop, PortalRoutingState};
+
+#[test]
+fn routing_summary_lists_managed_desktops_compactly() {
+    assert_eq!(
+        routing_summary(PortalRoutingState::Managed(vec![
+            ManagedPortalDesktop {
+                name: "Hyprland".to_string(),
+                current: true,
+                desktop_specific: true,
+            },
+            ManagedPortalDesktop {
+                name: "GNOME".to_string(),
+                current: false,
+                desktop_specific: true,
+            },
+        ])),
+        vec![
+            "Portal routing: enabled for 2 desktops",
+            "  • Hyprland (current)",
+            "  • GNOME",
+        ],
+    );
+}
 
 fn detect(env: &[(&str, &str)], ancestors: &[&str]) -> Option<TerminalAdapter> {
     let lookup = |name: &str| {
