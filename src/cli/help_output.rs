@@ -9,6 +9,7 @@ pub(super) enum HelpTopic {
     ShellInit,
     ShellInstall,
     ShellUninstall,
+    Portal,
 }
 
 pub(super) fn print_help(topic: HelpTopic) {
@@ -72,6 +73,7 @@ fn text(topic: HelpTopic, styled: bool) -> String {
             "[SHELL]",
             "Target shell (bash, zsh, fish, or nu); detected when omitted",
         ),
+        HelpTopic::Portal => portal_text(style),
     }
 }
 
@@ -105,11 +107,41 @@ fn root_text(style: HelpStyle) -> String {
             "\n",
             "  Supported shells: bash, zsh, fish, nu\n",
             "\n",
+            "{heading}Portal integration:{reset}\n",
+            "  {literal}elio portal enable{reset}              Enable XDG FileChooser portal integration\n",
+            "  {literal}elio portal status{reset}              Show XDG FileChooser portal integration status\n",
+            "  {literal}elio portal disable{reset}             Disable XDG FileChooser portal integration\n",
+            "\n",
             "{heading}CLI documentation:{reset} {link}https://elio-fm.github.io/docs/cli/{reset}\n",
         ),
         heading = heading,
         literal = literal,
         link = link,
+        reset = reset,
+    )
+}
+
+fn portal_text(style: HelpStyle) -> String {
+    let HelpStyle {
+        heading,
+        literal,
+        reset,
+        ..
+    } = style;
+    format!(
+        concat!(
+            "{heading}Usage:{reset} {literal}elio portal{reset} <COMMAND>\n",
+            "\n",
+            "{heading}Commands:{reset}\n",
+            "  {literal}enable{reset}   Enable portal integration\n",
+            "  {literal}disable{reset}  Disable portal integration\n",
+            "  {literal}status{reset}   Report portal integration status\n",
+            "\n",
+            "{heading}Options:{reset}\n",
+            "  {literal}-h, --help{reset}  Print help\n",
+        ),
+        heading = heading,
+        literal = literal,
         reset = reset,
     )
 }

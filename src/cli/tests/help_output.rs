@@ -18,3 +18,12 @@ fn styled_help_applies_semantic_terminal_styles() {
         shell_help.contains("\x1b[4;36mhttps://elio-fm.github.io/docs/shell-integration/\x1b[0m")
     );
 }
+
+#[test]
+fn portal_help_lists_the_placeholder_commands() {
+    let help = text(HelpTopic::Portal, false);
+    assert!(help.contains("Usage: elio portal <COMMAND>"));
+    assert!(help.contains("enable   Enable portal integration"));
+    assert!(help.contains("disable  Disable portal integration"));
+    assert!(help.contains("status   Report portal integration status"));
+}

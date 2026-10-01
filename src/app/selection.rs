@@ -69,12 +69,39 @@ impl App {
         self.chooser.enable_save_as(name);
         self.status = "Save as mode".to_string();
     }
+    #[allow(dead_code)] // Used by focused chooser contract tests.
+    pub(crate) fn enable_portal_chooser_mode(
+        &mut self,
+        mode: crate::chooser::portal::PortalChooserMode,
+    ) -> crate::chooser::portal::ExternalCancellation {
+        self.status = mode.status_message().to_string();
+        self.chooser.enable_portal(mode)
+    }
+    #[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
+    pub(crate) fn enable_portal_chooser_mode_with_cancellation(
+        &mut self,
+        mode: crate::chooser::portal::PortalChooserMode,
+        cancellation: crate::chooser::portal::ExternalCancellation,
+    ) {
+        self.status = mode.status_message().to_string();
+        self.chooser
+            .enable_portal_with_cancellation(mode, cancellation);
+    }
     pub(crate) fn save_as_mode(&self) -> bool {
         self.chooser.is_save_as()
     }
 
     pub(crate) fn take_chooser_exit(&mut self) -> Option<ChooserExit> {
         self.chooser.take_exit()
+    }
+
+    pub(crate) fn apply_external_chooser_cancellation(&mut self) -> bool {
+        if self.chooser.apply_external_cancellation() {
+            self.should_change_directory_on_quit = false;
+            self.should_quit = true;
+            return true;
+        }
+        false
     }
 
     pub(crate) fn chooser_mode(&self) -> bool {
@@ -92,13 +119,23 @@ impl App {
             return;
         }
         let cwd = self.file_browser.cwd.clone();
-        let focused_path = self.selected_entry().map(|entry| entry.path.clone());
+        let focused_path = self
+            .selected_entry()
+            .filter(|entry| {
+                !self.chooser.selects_current_directory_when_unmarked() || entry.is_dir()
+            })
+            .map(|entry| entry.path.clone());
         let selected_paths = self.selected_paths_sorted();
         if self
             .chooser
             .confirm_selection(&cwd, focused_path.as_deref(), selected_paths)
         {
+            if self.chooser.exit_is_cancelled() {
+                self.should_change_directory_on_quit = false;
+            }
             self.should_quit = true;
+        } else if let Some(message) = self.chooser.take_rejection() {
+            self.status = message.to_string();
         }
     }
 
@@ -108,7 +145,12 @@ impl App {
             return;
         }
         if self.chooser.confirm_path(&self.file_browser.cwd, path) {
+            if self.chooser.exit_is_cancelled() {
+                self.should_change_directory_on_quit = false;
+            }
             self.should_quit = true;
+        } else if let Some(message) = self.chooser.take_rejection() {
+            self.status = message.to_string();
         }
     }
 

@@ -1,6 +1,7 @@
 use super::{
     help_output::HelpTopic,
     options::{self, Options},
+    portal::PortalCommand,
     shell_commands::ShellIntegrationCommand,
 };
 use crate::shell_integration::Shell;
@@ -9,6 +10,7 @@ use std::path::PathBuf;
 
 const RUN_USAGE: &str = "Usage: elio [OPTIONS] [PATH]";
 const SHELL_USAGE: &str = "Usage: elio shell init <SHELL>\n       elio shell install [SHELL]\n       elio shell uninstall [SHELL]";
+const PORTAL_USAGE: &str = "Usage: elio portal <COMMAND>";
 
 #[derive(Debug)]
 pub(super) enum Action {
@@ -16,6 +18,9 @@ pub(super) enum Action {
     Help(HelpTopic),
     Version,
     ShellIntegration(ShellIntegrationCommand),
+    Portal(PortalCommand),
+    PortalChooser(PathBuf),
+    PortalService,
     UserFsHelper,
 }
 
@@ -28,6 +33,15 @@ pub(super) fn parse(args: impl IntoIterator<Item = String>) -> Result<Action> {
 
     match args.as_slice() {
         [arg] if arg == "--internal-user-fs-helper" => return Ok(Action::UserFsHelper),
+        [arg] if arg == "--portal-service" => return Ok(Action::PortalService),
+        [arg, socket_flag, socket] if arg == "--portal-chooser" && socket_flag == "--socket" => {
+            return Ok(Action::PortalChooser(PathBuf::from(socket)));
+        }
+        [arg, ..] if arg == "--portal-chooser" => {
+            return Err(anyhow::anyhow!(
+                "error: `--portal-chooser` requires exactly `--socket SOCKET`"
+            ));
+        }
         [arg] if arg == "--version" || arg == "-V" => return Ok(Action::Version),
         [arg] if is_help(arg) => return Ok(Action::Help(HelpTopic::Root)),
         [arg, unexpected, ..] if arg == "--version" || arg == "-V" => {
@@ -42,8 +56,44 @@ pub(super) fn parse(args: impl IntoIterator<Item = String>) -> Result<Action> {
     if let Some(action) = parse_shell(&args)? {
         return Ok(action);
     }
+    if let Some(action) = parse_portal(&args)? {
+        return Ok(action);
+    }
 
     parse_options(args).map(Action::Run)
+}
+
+fn parse_portal(args: &[String]) -> Result<Option<Action>> {
+    let [command, rest @ ..] = args else {
+        return Ok(None);
+    };
+    if command != "portal" {
+        return Ok(None);
+    }
+
+    let action = match rest {
+        [help] if is_help(help) => Action::Help(HelpTopic::Portal),
+        [subcommand, help] if is_portal_subcommand(subcommand) && is_help(help) => {
+            Action::Help(HelpTopic::Portal)
+        }
+        [subcommand] if subcommand == "enable" => Action::Portal(PortalCommand::Enable),
+        [subcommand] if subcommand == "disable" => Action::Portal(PortalCommand::Disable),
+        [subcommand] if subcommand == "status" => Action::Portal(PortalCommand::Status),
+        [_, unexpected, ..] => {
+            return Err(unexpected_argument_with_usage(unexpected, PORTAL_USAGE));
+        }
+        _ => {
+            return Err(anyhow::anyhow!(
+                "error: expected subcommand 'enable', 'disable', or 'status' after 'elio portal'\n\n{PORTAL_USAGE}"
+            ));
+        }
+    };
+
+    Ok(Some(action))
+}
+
+fn is_portal_subcommand(command: &str) -> bool {
+    matches!(command, "enable" | "disable" | "status")
 }
 
 fn parse_shell(args: &[String]) -> Result<Option<Action>> {

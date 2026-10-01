@@ -73,7 +73,7 @@ fn shell_init_fish_prints_sourceable_function() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("function elio"));
     assert!(stdout.contains("switch \"$argv[1]\""));
-    assert!(stdout.contains("case shell '-*'"));
+    assert!(stdout.contains("case shell portal '-*'"));
     assert!(stdout.contains("case --chooser-file '--chooser-file=*'"));
     assert!(stdout.contains(env!("CARGO_BIN_EXE_elio")));
     assert!(stdout.contains("$argv"));
@@ -95,7 +95,7 @@ fn shell_init_bash_prints_function() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("elio() {"));
     assert!(stdout.contains("case \"${1-}\" in"));
-    assert!(stdout.contains("shell|-*)"));
+    assert!(stdout.contains("shell|portal|-*)"));
     assert!(stdout.contains("--chooser-file|--chooser-file=*)"));
     assert!(stdout.contains(env!("CARGO_BIN_EXE_elio")));
     assert!(stdout.contains("\"$@\""));
@@ -145,6 +145,7 @@ fn shell_init_nu_prints_sourceable_command() {
     assert!(stdout.contains("let has_chooser_file = ($args | any"));
     assert!(stdout.contains("$has_chooser_file"));
     assert!(stdout.contains("if $has_chooser_file {"));
+    assert!(stdout.contains("(($args.0 | into string) == 'portal')"));
     assert!(
         stdout
             .find("if $has_chooser_file {")

@@ -27,6 +27,26 @@ fn standard_actions_are_recognized() {
         parse(["--internal-user-fs-helper".to_string()]).unwrap(),
         Action::UserFsHelper
     ));
+    assert!(matches!(
+        parse(["--portal-service".to_string()]).unwrap(),
+        Action::PortalService
+    ));
+}
+
+#[test]
+fn hidden_portal_chooser_requires_a_socket() {
+    let action = parse(strings(&[
+        "--portal-chooser",
+        "--socket",
+        "/tmp/request.sock",
+    ]))
+    .unwrap();
+    assert!(matches!(
+        action,
+        Action::PortalChooser(path) if path == std::path::Path::new("/tmp/request.sock")
+    ));
+    assert!(parse(strings(&["--portal-chooser"])).is_err());
+    assert!(parse(strings(&["--portal-chooser", "/tmp/request.sock"])).is_err());
 }
 
 #[test]
@@ -96,6 +116,44 @@ fn shell_integration_commands_are_recognized() {
         parse(strings(&["shell", "uninstall", "nu"])).unwrap(),
         Action::ShellIntegration(ShellIntegrationCommand::Uninstall(Some(Shell::Nu)))
     ));
+}
+
+#[test]
+fn portal_commands_and_help_topics_are_recognized() {
+    assert!(matches!(
+        parse(strings(&["portal", "enable"])).unwrap(),
+        Action::Portal(super::PortalCommand::Enable)
+    ));
+    assert!(matches!(
+        parse(strings(&["portal", "disable"])).unwrap(),
+        Action::Portal(super::PortalCommand::Disable)
+    ));
+    assert!(matches!(
+        parse(strings(&["portal", "status"])).unwrap(),
+        Action::Portal(super::PortalCommand::Status)
+    ));
+    assert!(matches!(
+        parse(strings(&["portal", "--help"])).unwrap(),
+        Action::Help(HelpTopic::Portal)
+    ));
+    assert!(matches!(
+        parse(strings(&["portal", "enable", "--help"])).unwrap(),
+        Action::Help(HelpTopic::Portal)
+    ));
+}
+
+#[test]
+fn portal_rejects_unknown_or_extra_arguments() {
+    let unknown = parse(strings(&["portal", "unknown"]))
+        .unwrap_err()
+        .to_string();
+    assert!(unknown.contains("expected subcommand 'enable', 'disable', or 'status'"));
+
+    let extra = parse(strings(&["portal", "status", "extra"]))
+        .unwrap_err()
+        .to_string();
+    assert!(extra.contains("error: unexpected argument 'extra' found"));
+    assert!(extra.contains("Usage: elio portal <COMMAND>"));
 }
 
 #[test]

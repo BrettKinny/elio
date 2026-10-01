@@ -74,7 +74,7 @@ fn posix_init_script_passes_cli_commands_through() {
     let script = init_script(Shell::Bash, "command elio");
 
     assert!(script.contains("case \"${1-}\" in"));
-    assert!(script.contains("shell|-*)"));
+    assert!(script.contains("shell|portal|-*)"));
     assert!(script.contains("--chooser-file|--chooser-file=*)"));
     assert!(script.contains("command elio \"$@\""));
     assert!(script.contains("local arg tmp cwd status_code"));
@@ -89,7 +89,7 @@ fn fish_init_script_passes_cli_commands_through() {
     let script = init_script(Shell::Fish, "command elio");
 
     assert!(script.contains("switch \"$argv[1]\""));
-    assert!(script.contains("case shell '-*'"));
+    assert!(script.contains("case shell portal '-*'"));
     assert!(script.contains("case --chooser-file '--chooser-file=*'"));
     assert!(script.contains("command elio $argv"));
     assert!(script.contains("command elio --cwd-file \"$tmp\" $argv"));
@@ -104,6 +104,7 @@ fn nu_init_script_passes_cli_commands_through_without_posix_syntax() {
     assert!(script.contains("let has_chooser_file = ($args | any"));
     assert!(script.contains("$has_chooser_file"));
     assert!(script.contains("if $has_chooser_file {"));
+    assert!(script.contains("(($args.0 | into string) == 'portal')"));
     assert!(script.contains("run-external \"elio\" ...$args\n        $env.LAST_EXIT_CODE"));
     assert!(script.contains("run-external \"elio\" ...$args"));
     assert!(script.contains("mktemp -t \"elio-cwd.XXXXXX\""));

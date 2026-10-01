@@ -4,6 +4,7 @@ mod layout;
 mod loading;
 mod open;
 mod places;
+mod portal;
 mod preview;
 #[cfg(test)]
 mod tests;
@@ -17,9 +18,10 @@ pub(crate) use self::{
         Action, ChooserKeyAction, KeyBindings, KeyContext, KeyList, normalized_plain_key_char,
     },
     layout::{LayoutConfig, PaneWeights},
-    loading::config_dir,
+    loading::{config_dir, config_path},
     open::{OpenConfig, OpenPlatform, OpenRule, OpenTargetType},
     places::{BuiltinPlace, PlaceEntrySpec, PlacesConfig},
+    portal::{ConfigurePortalTerminal, PortalConfig, ensure_portal_terminal},
     preview::PreviewConfig,
     ui::UiConfig,
 };
@@ -57,4 +59,9 @@ pub(crate) fn key_bindings() -> &'static KeyBindings {
 
 pub(crate) fn open() -> &'static OpenConfig {
     &loading::active_config().open
+}
+
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+pub(crate) fn portal_terminal() -> Option<crate::portal::terminal::TerminalAdapter> {
+    loading::active_config().portal.terminal
 }

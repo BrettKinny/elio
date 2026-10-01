@@ -50,6 +50,12 @@ enum ChooserLaunch {
     None,
     Choose,
     SaveAs(crate::chooser::SaveAsStartup),
+    #[cfg(all(unix, any(target_os = "linux", target_os = "freebsd")))]
+    Portal {
+        mode: crate::chooser::portal::PortalChooserMode,
+        cancellation: crate::chooser::portal::ExternalCancellation,
+        cwd: Option<PathBuf>,
+    },
 }
 
 fn init_terminal() -> Result<(AppTerminal, Drainer, kitty_dnd::KittyDndRuntime)> {
@@ -315,6 +321,33 @@ pub(crate) fn run_with_startup_state(
     }
 }
 
+#[cfg(all(unix, any(target_os = "linux", target_os = "freebsd")))]
+pub(crate) fn run_portal_chooser(
+    mode: crate::chooser::portal::PortalChooserMode,
+    initial_path: Option<PathBuf>,
+    cancellation: crate::chooser::portal::ExternalCancellation,
+) -> Result<ChooserExit> {
+    let (mut terminal, drainer, kitty_dnd) = init_terminal()?;
+    let cwd = initial_path;
+    let result = run_app(
+        &mut terminal,
+        &drainer,
+        &kitty_dnd,
+        cwd.clone(),
+        None,
+        false,
+        ChooserLaunch::Portal {
+            mode,
+            cancellation,
+            cwd,
+        },
+    );
+    restore_terminal(&mut terminal, &drainer, &kitty_dnd)?;
+    result?
+        .chooser
+        .ok_or_else(|| anyhow::anyhow!("portal chooser exited without a result"))
+}
+
 fn run_open_command_in_terminal(
     program: &str,
     args: &[String],
@@ -408,6 +441,8 @@ fn run_app(
 
     let cwd = match &chooser_launch {
         ChooserLaunch::SaveAs(startup) => Some(startup.directory.clone()),
+        #[cfg(all(unix, any(target_os = "linux", target_os = "freebsd")))]
+        ChooserLaunch::Portal { cwd, .. } => cwd.clone(),
         _ => cwd,
     };
     let mut app = match cwd {
@@ -419,6 +454,10 @@ fn run_app(
             app.enable_save_as_mode(startup.name);
         }
         ChooserLaunch::Choose => app.enable_chooser_mode(),
+        #[cfg(all(unix, any(target_os = "linux", target_os = "freebsd")))]
+        ChooserLaunch::Portal {
+            mode, cancellation, ..
+        } => app.enable_portal_chooser_mode_with_cancellation(mode, cancellation),
         ChooserLaunch::None => {}
     }
     app.refresh_git_branch();
@@ -454,6 +493,9 @@ fn run_app(
     let mut pending_drop_in = kitty_dnd::PendingDropIn::default();
 
     loop {
+        if app.apply_external_chooser_cancellation() {
+            break;
+        }
         if app.should_quit {
             break;
         }

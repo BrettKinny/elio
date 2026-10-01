@@ -10,6 +10,7 @@ on:
       - 'nix/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - 'build.rs'
   pull_request:
     paths:
       - '.github/workflows/nix-check.yml'
@@ -18,6 +19,7 @@ on:
       - 'nix/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - 'build.rs'
   workflow_dispatch:
 
 permissions:
@@ -53,7 +55,7 @@ jobs:
       - name: Install Nix
         uses: cachix/install-nix-action@v31
 
-      - name: Check flake (including package tests)
+      - name: Check flake (including elio-tests)
         run: |
           test "$(nix eval --impure --raw --expr builtins.currentSystem)" = '${{ matrix.system }}'
           nix flake check --print-build-logs

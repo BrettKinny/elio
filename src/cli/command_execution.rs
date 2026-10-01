@@ -2,7 +2,7 @@ use super::{
     arguments::{self, Action},
     help_output,
     options::Options,
-    shell_commands,
+    portal, shell_commands,
 };
 use anyhow::Result;
 use std::{env, process::ExitCode};
@@ -26,6 +26,11 @@ fn dispatch(action: Action) -> Result<ExitCode> {
             shell_commands::execute(command)?;
             Ok(ExitCode::SUCCESS)
         }
+        Action::Portal(command) => portal::execute(command).map(|()| ExitCode::SUCCESS),
+        Action::PortalChooser(socket) => {
+            elio::run_portal_chooser(socket).map(|()| ExitCode::SUCCESS)
+        }
+        Action::PortalService => elio::run_portal_service().map(|()| ExitCode::SUCCESS),
         Action::UserFsHelper => elio::run_user_fs_helper().map(|()| ExitCode::SUCCESS),
     }
 }

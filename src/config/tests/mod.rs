@@ -2,6 +2,7 @@ mod goto;
 mod layout;
 mod open;
 mod places;
+mod portal;
 mod preview;
 mod ui;
 

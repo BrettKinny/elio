@@ -11,6 +11,14 @@
 # [preview]
 # tab_width = 4  # tab-stop width in columns for text/code previews (1–16, clamped)
 
+# Terminal used by elio's file chooser portal.
+# `elio portal enable` detects and sets this automatically when possible.
+# Supported values: kitty, ghostty, foot, wezterm, alacritty, rio, konsole,
+# gnome-terminal, xterm.
+#
+# [portal]
+# terminal = "kitty"
+
 # Customize the Places pane. `entries` controls the pinned items in order;
 # `show_devices` keeps or hides the auto-detected Devices section.
 # Omit [places] entirely to keep the exact default sidebar.
