@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed PowerShell integration reporting failed commands as successful and skipping directory changes that differ only by letter case.
 - Fixed Nushell integration not changing directory to symlinked folders on quit.
 - Fixed Sixel previews disappearing in tmux.
 - Fixed `-h` and `--help` for shell integration commands.

@@ -173,7 +173,7 @@ fn shell_init_pwsh_prints_function() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("function elio {"));
     assert!(stdout.contains(env!("CARGO_BIN_EXE_elio")));
-    assert!(stdout.contains("& $elioExe --cwd-file $tmp @args"));
+    assert!(stdout.contains("& $elioExe --cwd-file $tmp @elioArgs"));
     assert!(stdout.contains("[System.IO.Path]::GetTempFileName()"));
     assert!(stdout.contains("Set-Location -LiteralPath $cwd"));
     assert!(stdout.contains("$global:LASTEXITCODE = $statusCode"));

@@ -169,7 +169,7 @@ fn pwsh_init_script_passes_cli_commands_through_and_avoids_self_recursion() {
         script.contains("$first -eq 'shell' -or $first -eq 'portal' -or $first.StartsWith('-')")
     );
     assert!(script.contains("$value -eq '--chooser-file'"));
-    assert!(script.contains("& $elioExe --cwd-file $tmp @args"));
+    assert!(script.contains("& $elioExe --cwd-file $tmp @elioArgs"));
     assert!(script.contains("[System.IO.Path]::GetTempFileName()"));
     assert!(script.contains("Set-Location -LiteralPath $cwd"));
     assert!(
