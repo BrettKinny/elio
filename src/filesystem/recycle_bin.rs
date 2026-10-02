@@ -63,7 +63,38 @@ pub(crate) fn recycle_bin_dir() -> Option<PathBuf> {
 
 /// Returns `true` when `dir` is the current user's Recycle Bin directory.
 pub(crate) fn is_recycle_bin_dir(dir: &Path) -> bool {
-    recycle_bin_dir().is_some_and(|bin| dir == bin)
+    recycle_bin_dir().is_some_and(|bin| same_dir(dir, &bin))
+}
+
+/// Compares two paths for pointing at the same directory, without touching the
+/// filesystem.
+///
+/// Navigation canonicalizes the directory it loads, and on Windows
+/// [`Path::canonicalize`] returns an extended-length path (`\\?\C:\…`), while
+/// [`recycle_bin_dir`] builds a plain one from `%SystemDrive%`. A bare `==`
+/// therefore never matched once the user actually navigated into the bin: the
+/// listing hook was skipped and every item kept its raw `$R…` name, and
+/// [`is_recycle_bin_entry`] rejected the very entries restore is for.
+///
+/// Comparing case-insensitively is correct here rather than merely convenient —
+/// Windows paths are case-insensitive, so `C:\` and `c:\` are the same
+/// directory. Canonicalization is deliberately not used: this runs once per
+/// entry from [`is_recycle_bin_entry`], and a syscall per item would show up on
+/// a bin holding thousands.
+#[cfg(windows)]
+fn same_dir(a: &Path, b: &Path) -> bool {
+    fn comparable(path: &Path) -> String {
+        let text = path.to_string_lossy();
+        let text = text.strip_prefix(r"\\?\").unwrap_or(&text);
+        text.trim_end_matches('\\').to_lowercase()
+    }
+
+    comparable(a) == comparable(b)
+}
+
+#[cfg(not(windows))]
+fn same_dir(a: &Path, b: &Path) -> bool {
+    a == b
 }
 
 /// Returns `true` when `path` is a `$R…` content entry sitting directly in the

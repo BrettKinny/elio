@@ -209,6 +209,52 @@ fn roundtrips_a_real_file_through_the_recycle_bin() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+/// Navigation canonicalizes the directory it loads, so the gate has to accept
+/// the extended-length form `Path::canonicalize` produces on Windows. Comparing
+/// with `==` passed every synthetic test while failing for real, because those
+/// tests only ever fed in the plain path this module builds itself.
+#[test]
+#[cfg(windows)]
+fn recycle_bin_is_recognized_through_an_extended_length_path() {
+    let plain = Path::new(r"C:\$Recycle.Bin\S-1-5-21-1-2-3-1001");
+
+    assert!(same_dir(
+        Path::new(r"\\?\C:\$Recycle.Bin\S-1-5-21-1-2-3-1001"),
+        plain
+    ));
+}
+
+/// Windows paths are case-insensitive, and the drive letter's case in
+/// `%SystemDrive%` is not guaranteed to match what navigation reports.
+#[test]
+#[cfg(windows)]
+fn recycle_bin_match_ignores_case_and_a_trailing_separator() {
+    let plain = Path::new(r"C:\$Recycle.Bin\S-1-5-21-1-2-3-1001");
+
+    assert!(same_dir(
+        Path::new(r"c:\$recycle.bin\s-1-5-21-1-2-3-1001"),
+        plain
+    ));
+    assert!(same_dir(
+        Path::new(r"\\?\C:\$Recycle.Bin\S-1-5-21-1-2-3-1001\"),
+        plain
+    ));
+}
+
+/// A different directory must still be rejected — the normalization must not be
+/// loose enough to match any path that merely looks similar.
+#[test]
+#[cfg(windows)]
+fn unrelated_directory_is_not_treated_as_the_recycle_bin() {
+    let plain = Path::new(r"C:\$Recycle.Bin\S-1-5-21-1-2-3-1001");
+
+    assert!(!same_dir(
+        Path::new(r"C:\$Recycle.Bin\S-1-5-21-1-2-3-9999"),
+        plain
+    ));
+    assert!(!same_dir(Path::new(r"C:\Users\someone\Downloads"), plain));
+}
+
 /// The listing hook hides `$I` sidecars and resolves every `$R` entry to its
 /// original name. Ignored by default: it reads the machine's real Recycle Bin.
 #[test]
@@ -220,9 +266,15 @@ fn lists_the_real_recycle_bin_with_original_names() {
         return;
     };
     assert!(is_recycle_bin_dir(&dir));
+    // The path navigation actually loads, which is what regressed.
+    let navigated = dir.canonicalize().expect("recycle bin should canonicalize");
+    assert!(
+        is_recycle_bin_dir(&navigated),
+        "the canonicalized path navigation loads must be recognized too"
+    );
 
     let snapshot = crate::filesystem::load_directory_snapshot(
-        &dir,
+        &navigated,
         false,
         crate::filesystem::SortMode::Name,
         true,
