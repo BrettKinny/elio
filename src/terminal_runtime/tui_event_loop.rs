@@ -2,6 +2,7 @@ use super::{
     cd_on_exit,
     input_reader::{InputEvent, InputReader},
     kitty_dnd, shell_here,
+    terminal_output::terminal_output_handles,
     tui_drawing::{AppTerminal, Drainer, ThreadedWriter, draw_terminal_frame},
     zoxide,
 };
@@ -25,8 +26,6 @@ use crossterm::{
     },
 };
 use ratatui::{Terminal, backend::CrosstermBackend, layout::Rect};
-#[cfg(unix)]
-use std::fs::OpenOptions;
 use std::{
     io::{self, ErrorKind, IsTerminal, Write},
     path::{Path, PathBuf},
@@ -104,17 +103,6 @@ fn try_init_terminal() -> Result<(AppTerminal, Drainer, kitty_dnd::KittyDndRunti
     clear_for_full_repaint(&mut terminal)?;
     terminal.hide_cursor()?;
     Ok((terminal, drainer, kitty_dnd))
-}
-
-#[cfg(unix)]
-fn terminal_output_handles() -> io::Result<(Box<dyn Write + Send>, Box<dyn Write + Send>)> {
-    let tty = OpenOptions::new().read(true).write(true).open("/dev/tty")?;
-    Ok((Box::new(tty.try_clone()?), Box::new(tty)))
-}
-
-#[cfg(not(unix))]
-fn terminal_output_handles() -> io::Result<(Box<dyn Write + Send>, Box<dyn Write + Send>)> {
-    Ok((Box::new(io::stdout()), Box::new(io::stdout())))
 }
 
 pub(super) fn clear_for_full_repaint(terminal: &mut AppTerminal) -> io::Result<()> {

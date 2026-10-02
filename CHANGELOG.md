@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed terminal applications using elio's startup folder as their working directory instead of the current folder. ([#293])
 - Fixed Git branch names truncating when space is available in the status bar.
 - Fixed the Git branch indicator staying stale after external branch switches, including in subfolders and linked worktrees.
+- Fixed `--chooser-file -` on Windows writing the TUI into the chooser stream instead of the
+  selection; the interface now draws to the console (`CONOUT$`) as it already did to `/dev/tty`
+  on Unix.
+- Fixed the terminal cell-size probe writing to stdout on every platform, which could corrupt
+  `--chooser-file -` output when an image preview was open.
 
 ## [1.12.0] - 2026-08-24
 

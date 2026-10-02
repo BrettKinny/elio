@@ -522,3 +522,47 @@ fn chooser_stdout_pipe_receives_only_selection() {
 
     fs::remove_dir_all(root).expect("temp directory should be removed");
 }
+
+// The Windows counterpart to `chooser_stdout_pipe_receives_only_selection`.
+// Without a pty there is no way to drive the TUI to a real selection, so this
+// checks the half that regressed: that drawing a frame puts nothing into the
+// piped chooser stream. The child gets a console of its own because killing it
+// leaves that console in raw mode and on the alternate screen — on the shared
+// one that would wreck the terminal running the tests.
+#[cfg(windows)]
+#[test]
+fn chooser_stdout_pipe_stays_clean_while_the_tui_draws() {
+    use std::{os::windows::process::CommandExt, process::Stdio, thread, time::Duration};
+
+    const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+
+    let root = temp_path("chooser-stdout-windows");
+    fs::create_dir_all(&root).expect("temp directory should be created");
+    fs::write(root.join("picked.txt"), "picked").expect("selected file should be written");
+
+    let mut child = elio()
+        .arg("--chooser-file")
+        .arg("-")
+        .arg(&root)
+        .creation_flags(CREATE_NEW_CONSOLE)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("elio should spawn with its own console");
+
+    // Long enough to enter the alternate screen and draw at least one frame.
+    thread::sleep(Duration::from_millis(1500));
+    child.kill().expect("elio should be killable");
+    let output = child
+        .wait_with_output()
+        .expect("chooser stdout should be readable");
+
+    assert!(
+        output.stdout.is_empty(),
+        "TUI output leaked into the chooser stream: {:?}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    fs::remove_dir_all(root).expect("temp directory should be removed");
+}

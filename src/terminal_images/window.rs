@@ -75,9 +75,9 @@ fn query_windows_terminal_cell_pixel_size() -> Option<(u32, u32)> {
         ) -> i32;
     }
 
-    let mut stdout = std::io::stdout();
-    stdout.write_all(b"\x1b[16t").ok()?;
-    stdout.flush().ok()?;
+    let mut terminal = crate::terminal_runtime::probe_writer();
+    terminal.write_all(b"\x1b[16t").ok()?;
+    terminal.flush().ok()?;
 
     let stdin_handle = unsafe { GetStdHandle(STD_INPUT_HANDLE) };
     if stdin_handle.is_null() || stdin_handle == INVALID_HANDLE_VALUE {
@@ -134,9 +134,9 @@ fn query_windows_terminal_cell_pixel_size() -> Option<(u32, u32)> {
     use std::io::Write;
     use std::time::{Duration, Instant};
 
-    let mut stdout = std::io::stdout();
-    stdout.write_all(b"\x1b[16t").ok()?;
-    stdout.flush().ok()?;
+    let mut terminal = crate::terminal_runtime::probe_writer();
+    terminal.write_all(b"\x1b[16t").ok()?;
+    terminal.flush().ok()?;
 
     let deadline = Instant::now() + Duration::from_millis(300);
     let mut buf = [0u8; 64];
