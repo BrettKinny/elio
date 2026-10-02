@@ -3,13 +3,13 @@ use super::super::install::resolve_write_path;
 use super::super::{
     Shell,
     install::{
-        MANAGED_END, MANAGED_START, managed_script, remove_managed_blocks,
+        MANAGED_END, MANAGED_START, managed_script, pwsh_profile_in, remove_managed_blocks,
         uninstall_reload_command, upsert_managed_block, write_text_atomic,
     },
 };
 use std::{
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -33,6 +33,29 @@ fn uninstall_reload_command_removes_loaded_function() {
         "functions --erase elio"
     );
     assert_eq!(uninstall_reload_command(Shell::Nu), "hide elio");
+    assert_eq!(
+        uninstall_reload_command(Shell::Pwsh),
+        r"Remove-Item Function:\elio -ErrorAction SilentlyContinue"
+    );
+}
+
+#[test]
+fn pwsh_profile_in_follows_the_documents_layout() {
+    let documents = Path::new("redirected").join("Documents");
+    let profile = pwsh_profile_in(&documents);
+
+    assert_eq!(
+        profile.file_name().and_then(|name| name.to_str()),
+        Some("Microsoft.PowerShell_profile.ps1")
+    );
+    assert_eq!(
+        profile
+            .parent()
+            .and_then(Path::file_name)
+            .and_then(|name| name.to_str()),
+        Some("PowerShell")
+    );
+    assert!(profile.starts_with(&documents));
 }
 
 #[test]
