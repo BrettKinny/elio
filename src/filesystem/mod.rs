@@ -3,6 +3,7 @@ mod directory_statistics;
 mod directory_watching;
 mod entries;
 mod item_display;
+mod recycle_bin;
 mod sort;
 mod trash_metadata;
 mod trash_restoration;
@@ -25,6 +26,8 @@ pub(crate) use item_display::{
     describe_io_error, display_path, format_item_count, format_size, format_size_parts,
     format_time_ago, sanitize_terminal_text, symlink_target_display_label,
 };
+#[cfg(windows)]
+pub(crate) use recycle_bin::{recycle_bin_dir, remove_info_sidecar};
 pub use sort::SortMode;
 pub(crate) use sort::natural_cmp;
 pub(crate) use trash_metadata::{original_basename_from_path_value, parse_original_path};

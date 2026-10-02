@@ -211,6 +211,28 @@ pub(crate) fn load_directory_snapshot_cancellable(
         }
     }
 
+    // The Windows Recycle Bin stores each item as a `$R…` content file paired
+    // with a `$I…` metadata sidecar. Hide the sidecars and use them to display
+    // the original name and deletion time, mirroring the freedesktop handling
+    // above. Entry paths keep pointing at the `$R…` file so restore and delete
+    // still operate on the real target.
+    if super::recycle_bin::is_recycle_bin_dir(dir) {
+        entries.retain(|entry| !super::recycle_bin::is_info_sidecar_name(&entry.name));
+        for entry in &mut entries {
+            check_scan_canceled(canceled)?;
+            let Some(info) = super::recycle_bin::read_info(&entry.path) else {
+                continue;
+            };
+            if let Some(deleted_at) = info.deleted_at {
+                entry.modified = Some(deleted_at);
+            }
+            if let Some(original_name) = info.original_name() {
+                entry.name = original_name;
+                entry.name_key = entry.name.to_lowercase();
+            }
+        }
+    }
+
     check_scan_canceled(canceled)?;
     sort_entries(&mut entries, sort_mode, folders_first);
     check_scan_canceled(canceled)?;
