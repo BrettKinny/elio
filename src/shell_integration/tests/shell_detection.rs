@@ -29,7 +29,18 @@ fn detect_shell_from_command_distinguishes_supported_unsupported_and_unknown() {
         ShellDetection::Supported(Shell::Nu)
     );
     assert_eq!(
+        detect_shell_from_command("/usr/bin/pwsh\n"),
+        ShellDetection::Supported(Shell::Pwsh)
+    );
+    assert_eq!(
         detect_shell_from_command("shell_integration_cli\n"),
         ShellDetection::Unknown
     );
+}
+
+#[test]
+fn shell_parse_accepts_both_powershell_spellings() {
+    assert_eq!(Shell::parse("pwsh"), Ok(Shell::Pwsh));
+    assert_eq!(Shell::parse("powershell"), Ok(Shell::Pwsh));
+    assert_eq!(Shell::Pwsh.name(), "pwsh");
 }

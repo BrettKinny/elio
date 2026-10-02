@@ -6,7 +6,7 @@ use std::{
 };
 
 use super::Shell;
-use super::scripts::{init_script, nu_string_literal, shell_quote};
+use super::scripts::{init_script, nu_string_literal, pwsh_string_literal, shell_quote};
 
 pub(crate) struct InstallReport {
     pub(crate) shell: Shell,
@@ -45,7 +45,7 @@ pub(crate) fn install(shell: Shell, binary: &str) -> Result<InstallReport> {
             }
             write_text_atomic(&path, &script)?;
         }
-        Shell::Bash | Shell::Zsh => {
+        Shell::Bash | Shell::Zsh | Shell::Pwsh => {
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent)
                     .with_context(|| format!("failed to create {}", parent.display()))?;
@@ -67,7 +67,7 @@ pub(crate) fn uninstall(shell: Shell) -> Result<UninstallReport> {
     let path = integration_path(shell)?;
     let changed = match shell {
         Shell::Fish | Shell::Nu => uninstall_managed_file(&path)?,
-        Shell::Bash | Shell::Zsh => uninstall_posix(&path)?,
+        Shell::Bash | Shell::Zsh | Shell::Pwsh => uninstall_managed_block(&path)?,
     };
 
     Ok(UninstallReport {
@@ -85,7 +85,30 @@ fn integration_path(shell: Shell) -> Result<PathBuf> {
         Shell::Nu => Ok(config_home_for_shell("nu")?.join("nushell/autoload/elio.nu")),
         Shell::Bash => Ok(home_dir()?.join(".bashrc")),
         Shell::Zsh => Ok(zsh_config_dir()?.join(".zshrc")),
+        Shell::Pwsh => pwsh_profile_path(),
     }
+}
+
+/// PowerShell 7 current-user profile. On Windows it sits under the Documents known
+/// folder, which folder redirection and OneDrive move, so resolve it rather than
+/// joining onto the home directory. Elsewhere PowerShell follows XDG.
+#[cfg(windows)]
+fn pwsh_profile_path() -> Result<PathBuf> {
+    let documents = dirs::document_dir()
+        .context("error: could not find your Documents folder for pwsh integration")?;
+    Ok(pwsh_profile_in(&documents))
+}
+
+#[cfg(not(windows))]
+fn pwsh_profile_path() -> Result<PathBuf> {
+    Ok(config_home_for_shell("pwsh")?.join("powershell/Microsoft.PowerShell_profile.ps1"))
+}
+
+#[cfg(any(windows, test))]
+pub(super) fn pwsh_profile_in(documents: &Path) -> PathBuf {
+    documents
+        .join("PowerShell")
+        .join("Microsoft.PowerShell_profile.ps1")
 }
 
 fn config_home_for_shell(shell: &str) -> Result<PathBuf> {
@@ -115,6 +138,7 @@ fn reload_command(shell: Shell, path: &Path) -> String {
         Shell::Fish => format!("source {}", shell_quote(path)),
         Shell::Bash | Shell::Zsh => format!("source {}", shell_quote(path)),
         Shell::Nu => format!("source {}", nu_string_literal(path)),
+        Shell::Pwsh => format!(". {}", pwsh_string_literal(path)),
     }
 }
 
@@ -124,6 +148,7 @@ pub(super) fn uninstall_reload_command(shell: Shell) -> String {
         Shell::Zsh => "unfunction elio 2>/dev/null || true".to_string(),
         Shell::Fish => "functions --erase elio".to_string(),
         Shell::Nu => "hide elio".to_string(),
+        Shell::Pwsh => r"Remove-Item Function:\elio -ErrorAction SilentlyContinue".to_string(),
     }
 }
 
@@ -165,7 +190,7 @@ pub(super) fn upsert_managed_block(existing: &str, block: &str) -> Result<String
     Ok(updated)
 }
 
-fn uninstall_posix(path: &Path) -> Result<bool> {
+fn uninstall_managed_block(path: &Path) -> Result<bool> {
     let Some(existing) = read_utf8_if_exists(path)? else {
         return Ok(false);
     };
