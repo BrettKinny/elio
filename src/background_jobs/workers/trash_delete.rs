@@ -273,6 +273,10 @@ fn run_permanent_delete(
     // is reclaimed.
     #[cfg(target_os = "macos")]
     let mut deleted_names: Vec<String> = Vec::new();
+    // `$I` sidecars paired with deleted Recycle Bin `$R` entries; keyed by path
+    // because the displayed name is the original, not the `$R` name.
+    #[cfg(windows)]
+    let mut deleted_paths: Vec<&Path> = Vec::new();
 
     for target in &request.targets {
         if cancelled.load(Ordering::Relaxed)
@@ -319,6 +323,8 @@ fn run_permanent_delete(
                 restore_origins_trash_dir.as_deref(),
                 &mut deleted_names,
             );
+            #[cfg(windows)]
+            deleted_paths.push(target.path.as_path());
         }
 
         if !send_trash_progress(result_tx, request.token, completed, &mut last_progress_at) {
@@ -339,6 +345,11 @@ fn run_permanent_delete(
     #[cfg(target_os = "macos")]
     if let Err(error) = remove_deleted_restore_origins(&deleted_names) {
         errors.push(format!("Could not update Trash restore metadata: {error}"));
+    }
+
+    #[cfg(windows)]
+    for path in deleted_paths {
+        crate::filesystem::remove_info_sidecar(path);
     }
 
     (completed, errors, stopped_early)
