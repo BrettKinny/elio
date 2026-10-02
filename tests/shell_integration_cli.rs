@@ -162,6 +162,126 @@ fn shell_init_nu_prints_sourceable_command() {
 }
 
 #[test]
+fn shell_init_pwsh_prints_function() {
+    let output = elio()
+        .args(["shell", "init", "pwsh"])
+        .output()
+        .expect("failed to run elio shell init pwsh");
+
+    assert_success("elio shell init pwsh", &output);
+    assert_no_stderr("elio shell init pwsh", &output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("function elio {"));
+    assert!(stdout.contains(env!("CARGO_BIN_EXE_elio")));
+    assert!(stdout.contains("& $elioExe --cwd-file $tmp @args"));
+    assert!(stdout.contains("[System.IO.Path]::GetTempFileName()"));
+    assert!(stdout.contains("Set-Location -LiteralPath $cwd"));
+    assert!(stdout.contains("$global:LASTEXITCODE = $statusCode"));
+    assert!(!stdout.contains("& elio"));
+    assert!(!stdout.contains("command elio"));
+    assert!(!stdout.contains("mktemp"));
+}
+
+#[test]
+fn shell_init_powershell_alias_matches_pwsh() {
+    let pwsh = elio()
+        .args(["shell", "init", "pwsh"])
+        .output()
+        .expect("failed to run elio shell init pwsh");
+    let powershell = elio()
+        .args(["shell", "init", "powershell"])
+        .output()
+        .expect("failed to run elio shell init powershell");
+
+    assert_success("elio shell init powershell", &powershell);
+    assert_eq!(pwsh.stdout, powershell.stdout);
+}
+
+// PowerShell's profile lives under the Documents known folder on Windows, which no
+// environment variable can redirect, so the install tests only run where the
+// XDG-based location applies.
+#[cfg(unix)]
+#[test]
+fn shell_install_pwsh_adds_managed_block_idempotently() {
+    let root = temp_path("pwsh-install");
+    let config_home = root.join("config");
+    fs::create_dir_all(&config_home).expect("config home should be created");
+
+    for _ in 0..2 {
+        let output = elio()
+            .args(["shell", "install", "pwsh"])
+            .env("XDG_CONFIG_HOME", &config_home)
+            .output()
+            .expect("failed to run elio shell install pwsh");
+
+        assert_success("elio shell install pwsh", &output);
+        assert_no_stderr("elio shell install pwsh", &output);
+    }
+
+    let profile = config_home.join("powershell/Microsoft.PowerShell_profile.ps1");
+    let contents = fs::read_to_string(&profile).expect("pwsh profile should be written");
+    assert_eq!(
+        contents.matches("# >>> elio shell integration >>>").count(),
+        1
+    );
+    assert_eq!(
+        contents.matches("# <<< elio shell integration <<<").count(),
+        1
+    );
+    assert!(contents.contains("function elio {"));
+    assert!(contents.contains(env!("CARGO_BIN_EXE_elio")));
+
+    fs::remove_dir_all(root).expect("temp directory should be removed");
+}
+
+#[cfg(unix)]
+#[test]
+fn shell_uninstall_pwsh_removes_managed_block_idempotently() {
+    let root = temp_path("pwsh-uninstall");
+    let config_home = root.join("config");
+    let profile_dir = config_home.join("powershell");
+    fs::create_dir_all(&profile_dir).expect("profile directory should be created");
+    let profile = profile_dir.join("Microsoft.PowerShell_profile.ps1");
+    fs::write(&profile, "Set-PSReadLineOption -EditMode Vi\n")
+        .expect("existing profile should be written");
+
+    let install = elio()
+        .args(["shell", "install", "pwsh"])
+        .env("XDG_CONFIG_HOME", &config_home)
+        .output()
+        .expect("failed to run elio shell install pwsh");
+    assert_success("elio shell install pwsh", &install);
+
+    let uninstall = elio()
+        .args(["shell", "uninstall", "pwsh"])
+        .env("XDG_CONFIG_HOME", &config_home)
+        .output()
+        .expect("failed to run elio shell uninstall pwsh");
+
+    assert_success("elio shell uninstall pwsh", &uninstall);
+    assert_no_stderr("elio shell uninstall pwsh", &uninstall);
+    let stdout = String::from_utf8_lossy(&uninstall.stdout);
+    assert!(stdout.contains("Uninstalled elio shell integration for pwsh"));
+    assert!(stdout.contains("Updated:"));
+    assert!(stdout.contains(r"Remove-Item Function:\elio"));
+    assert_eq!(
+        fs::read_to_string(&profile).expect("profile should be readable"),
+        "Set-PSReadLineOption -EditMode Vi\n"
+    );
+
+    let uninstall_again = elio()
+        .args(["shell", "uninstall", "pwsh"])
+        .env("XDG_CONFIG_HOME", &config_home)
+        .output()
+        .expect("failed to run elio shell uninstall pwsh again");
+
+    assert_success("elio shell uninstall pwsh", &uninstall_again);
+    assert!(String::from_utf8_lossy(&uninstall_again.stdout).contains("No integration found at:"));
+
+    fs::remove_dir_all(root).expect("temp directory should be removed");
+}
+
+#[test]
 fn shell_install_nu_writes_autoload_file() {
     let root = temp_path("nu-install");
     let config_home = root.join("config");
@@ -734,6 +854,35 @@ fn shell_install_detects_shell_from_environment() {
     fs::remove_dir_all(root).expect("temp directory should be removed");
 }
 
+#[cfg(unix)]
+#[test]
+fn shell_install_detects_powershell_without_a_login_shell() {
+    let root = temp_path("detect-pwsh-install");
+    let config_home = root.join("config");
+
+    let output = elio()
+        .args(["shell", "install"])
+        .env_remove("SHELL")
+        .env("PSModulePath", "/usr/local/share/powershell/Modules")
+        .env("XDG_CONFIG_HOME", &config_home)
+        .output()
+        .expect("failed to run elio shell install");
+
+    assert_success("elio shell install", &output);
+    assert_no_stderr("elio shell install", &output);
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .contains("Installed elio shell integration for pwsh")
+    );
+    assert!(
+        config_home
+            .join("powershell/Microsoft.PowerShell_profile.ps1")
+            .exists()
+    );
+
+    fs::remove_dir_all(root).expect("temp directory should be removed");
+}
+
 #[test]
 fn shell_install_detects_current_parent_shell_before_login_shell_environment() {
     if Command::new("zsh").arg("-c").arg(":").status().is_err() {
@@ -1121,21 +1270,21 @@ fn shell_uninstall_fish_removes_symlink_but_preserves_target() {
 #[test]
 fn shell_init_rejects_unsupported_shell() {
     let output = elio()
-        .args(["shell", "init", "powershell"])
+        .args(["shell", "init", "tcsh"])
         .output()
-        .expect("failed to run elio shell init powershell");
+        .expect("failed to run elio shell init tcsh");
 
-    assert_failure("elio shell init powershell", &output);
-    assert_no_stdout("elio shell init powershell", &output);
+    assert_failure("elio shell init tcsh", &output);
+    assert_no_stdout("elio shell init tcsh", &output);
     assert_stderr_contains(
-        "elio shell init powershell",
+        "elio shell init tcsh",
         &output,
-        "error: unsupported shell 'powershell'",
+        "error: unsupported shell 'tcsh'",
     );
     assert_stderr_contains(
-        "elio shell init powershell",
+        "elio shell init tcsh",
         &output,
-        "supported shells: bash, zsh, fish, nu",
+        "supported shells: bash, zsh, fish, nu, pwsh",
     );
 }
 
