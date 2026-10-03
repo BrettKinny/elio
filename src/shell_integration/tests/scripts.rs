@@ -166,10 +166,11 @@ fn pwsh_init_script_passes_cli_commands_through_and_avoids_self_recursion() {
     assert!(script.contains("function elio {"));
     assert!(script.contains("$elioExe = 'C:\\elio\\elio.exe'"));
     assert!(
-        script.contains("$first -eq 'shell' -or $first -eq 'portal' -or $first.StartsWith('-')")
+        script.contains("$first -ceq 'shell' -or $first -ceq 'portal' -or $first.StartsWith('-')")
     );
-    assert!(script.contains("$value -eq '--chooser-file'"));
-    assert!(script.contains("& $elioExe --cwd-file $tmp @elioArgs"));
+    assert!(script.contains("$value -ceq '--chooser-file'"));
+    assert!(script.contains("& $elioExe @args"));
+    assert!(script.contains("& $elioExe --cwd-file $tmp @args"));
     assert!(script.contains("[System.IO.Path]::GetTempFileName()"));
     assert!(script.contains("Set-Location -LiteralPath $cwd"));
     assert!(
@@ -177,6 +178,17 @@ fn pwsh_init_script_passes_cli_commands_through_and_avoids_self_recursion() {
         "calling elio by name would resolve back to the wrapper function"
     );
     assert!(!script.contains("mktemp"));
+}
+
+#[test]
+fn pwsh_init_script_stays_a_simple_function_without_comments() {
+    let script = init_script(Shell::Pwsh, "'elio.exe'");
+
+    assert!(
+        !script.contains("CmdletBinding") && !script.contains("param("),
+        "an advanced function would bind common parameters such as -Verbose itself"
+    );
+    assert!(!script.contains('#'));
 }
 
 #[test]

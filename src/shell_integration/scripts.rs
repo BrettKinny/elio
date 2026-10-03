@@ -216,67 +216,45 @@ fn nu_init_script(executable: &str) -> String {
 fn pwsh_init_script(executable: &str) -> String {
     format!(
         r#"function elio {{
-    [CmdletBinding(PositionalBinding = $false)]
-    param(
-        [Parameter(ValueFromRemainingArguments = $true)]
-        [object[]] $elioArgs = @(),
-        # Otherwise PowerShell binds -V to its common -Verbose parameter.
-        [switch] $V
-    )
-    if ($V) {{ $elioArgs = @('-V') + $elioArgs }}
-
     $elioExe = {executable}
     if (-not $elioExe) {{
         $global:LASTEXITCODE = 127
-        $PSCmdlet.WriteError([System.Management.Automation.ErrorRecord]::new(
-            [System.Exception]::new('elio: could not find the elio executable'),
-            'ElioNotFound', [System.Management.Automation.ErrorCategory]::ObjectNotFound, $null))
+        Write-Error 'elio: could not find the elio executable'
         return
     }}
 
-    $passthrough = $false
-    if ($elioArgs.Count -gt 0) {{
-        $first = [string]$elioArgs[0]
-        $passthrough = $first -eq 'shell' -or $first -eq 'portal' -or $first.StartsWith('-')
-    }}
-    foreach ($arg in $elioArgs) {{
-        $value = [string]$arg
-        if ($value -eq '--chooser-file' -or $value.StartsWith('--chooser-file=')) {{
-            $passthrough = $true
+    if ($args.Count -gt 0) {{
+        $first = [string]$args[0]
+        if ($first -ceq 'shell' -or $first -ceq 'portal' -or $first.StartsWith('-')) {{
+            & $elioExe @args
+            return
         }}
     }}
 
-    # Report native failures ourselves after cleanup, including when the caller
-    # enables native-command errors and uses ErrorActionPreference = 'Stop'.
-    $PSNativeCommandUseErrorActionPreference = $false
-    if ($passthrough) {{
-        & $elioExe @elioArgs
-        $statusCode = $LASTEXITCODE
-    }} else {{
-        $tmp = [System.IO.Path]::GetTempFileName()
-        try {{
-            & $elioExe --cwd-file $tmp @elioArgs
-            $statusCode = $LASTEXITCODE
-            $cwd = (Get-Content -LiteralPath $tmp -Raw -ErrorAction SilentlyContinue)
-            if ($cwd) {{
-                $cwd = $cwd.TrimEnd([char]13, [char]10)
-            }}
-            if ($cwd -and $cwd -cne $PWD.Path -and (Test-Path -LiteralPath $cwd -PathType Container)) {{
-                Set-Location -LiteralPath $cwd
-            }}
-        }} finally {{
-            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+    foreach ($arg in $args) {{
+        $value = [string]$arg
+        if ($value -ceq '--chooser-file' -or $value.StartsWith('--chooser-file=')) {{
+            & $elioExe @args
+            return
         }}
+    }}
+
+    $tmp = [System.IO.Path]::GetTempFileName()
+    try {{
+        & $elioExe --cwd-file $tmp @args
+        $statusCode = $LASTEXITCODE
+        $cwd = (Get-Content -LiteralPath $tmp -Raw -ErrorAction SilentlyContinue)
+        if ($cwd) {{
+            $cwd = $cwd.TrimEnd([char]13, [char]10)
+        }}
+        if ($cwd -and $cwd -cne $PWD.Path -and (Test-Path -LiteralPath $cwd -PathType Container)) {{
+            Set-Location -LiteralPath $cwd
+        }}
+    }} finally {{
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
     }}
 
     $global:LASTEXITCODE = $statusCode
-    if ($statusCode -ne 0) {{
-        # WriteError on the cmdlet (unlike Write-Error in a simple function)
-        # also marks the invocation as failed for $? and the && / || operators.
-        $PSCmdlet.WriteError([System.Management.Automation.ErrorRecord]::new(
-            [System.Exception]::new("elio exited with code $statusCode"),
-            'ElioExitCode', [System.Management.Automation.ErrorCategory]::NotSpecified, $elioExe))
-    }}
 }}
 "#
     )
