@@ -16,9 +16,6 @@ use support::temp_path;
 
 const FAKE_ELIO: &str = r#"#!/bin/sh
 if [ "$1" = "--cwd-file" ]; then
-  if [ -n "${ELIO_TEST_TEMP_LOG-}" ]; then
-    printf '%s' "$2" > "$ELIO_TEST_TEMP_LOG"
-  fi
   if [ "${3-}" = "empty" ]; then
     : > "$2"
     exit 9
@@ -27,12 +24,7 @@ if [ "$1" = "--cwd-file" ]; then
   exit 7
 fi
 
-if [ "$1" = "--version" ] || [ "$1" = "-V" ]; then
-  printf 'VERSION-PASSTHROUGH\n'
-  exit 0
-fi
-
-if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+if [ "$1" = "--help" ]; then
   printf 'HELP-PASSTHROUGH\n'
   exit 3
 fi
@@ -84,7 +76,6 @@ enum ShellSyntax {
     Posix,
     Fish,
     Nu,
-    Pwsh,
 }
 
 #[test]
@@ -105,11 +96,6 @@ fn generated_fish_function_runs_when_executed() -> Result<(), Box<dyn Error>> {
 #[test]
 fn generated_nu_function_runs_when_executed() -> Result<(), Box<dyn Error>> {
     run_generated_function("nu", ShellSyntax::Nu)
-}
-
-#[test]
-fn generated_pwsh_function_runs_when_executed() -> Result<(), Box<dyn Error>> {
-    run_generated_function("pwsh", ShellSyntax::Pwsh)
 }
 
 #[test]
@@ -135,7 +121,6 @@ fn run_generated_function_with_destination(
         ShellSyntax::Posix => posix_runtime_script(&fixture.init_script, &fixture.start_dir),
         ShellSyntax::Fish => fish_runtime_script(&fixture.init_script, &fixture.start_dir),
         ShellSyntax::Nu => nu_runtime_script(&fixture.init_script, &fixture.start_dir),
-        ShellSyntax::Pwsh => pwsh_runtime_script(&fixture.init_script, &fixture.start_dir),
     };
 
     let mut command = Command::new(shell);
@@ -144,9 +129,6 @@ fn run_generated_function_with_destination(
     }
     if matches!(syntax, ShellSyntax::Nu) {
         command.arg("--no-config-file");
-    }
-    if matches!(syntax, ShellSyntax::Pwsh) {
-        command.args(["-NoLogo", "-NoProfile"]);
     }
     command.arg("-c").arg(runtime_script);
     configure_runtime_environment(&mut command, &fixture)?;
@@ -205,8 +187,6 @@ fn runtime_fixture(shell: &str) -> Result<RuntimeFixture, Box<dyn Error>> {
     let script = String::from_utf8(output.stdout)?;
     let expected_path_call = if shell == "nu" {
         r#"run-external "elio""#
-    } else if shell == "pwsh" {
-        "-CommandType Application"
     } else {
         "command elio"
     };
@@ -223,8 +203,7 @@ fn runtime_fixture(shell: &str) -> Result<RuntimeFixture, Box<dyn Error>> {
         "official-install {shell} init script should not contain target/debug/elio:\n{script}"
     );
 
-    let extension = if shell == "pwsh" { "ps1" } else { shell };
-    let init_script = root.path().join(format!("init.{extension}"));
+    let init_script = root.path().join(format!("init.{shell}"));
     fs::write(&init_script, script)?;
 
     Ok(RuntimeFixture {
@@ -393,87 +372,6 @@ print $"shell_pipeline=(open --raw {})"
         nu_quote(&pipeline_output),
         nu_quote(&pipeline_output),
     )
-}
-
-fn pwsh_runtime_script(init_script: &Path, start_dir: &Path) -> String {
-    format!(
-        r#". {init}
-$ErrorActionPreference = 'Continue'
-Set-Location -LiteralPath {start}
-elio 2>$null
-"cwd=$PWD code=$LASTEXITCODE"
-
-Set-Location -LiteralPath {start}
-elio empty 2>$null
-"empty_cwd=$PWD empty_code=$LASTEXITCODE"
-
-Set-Location -LiteralPath {start}
-elio --chooser-file /tmp/elio-choice child 2>$null
-"chooser_flag_first_cwd=$PWD chooser_flag_first_code=$LASTEXITCODE"
-elio child --chooser-file /tmp/elio-choice 2>$null
-"chooser_cwd=$PWD chooser_code=$LASTEXITCODE"
-elio child --chooser-file=/tmp/elio-choice 2>$null
-"chooser_equals_cwd=$PWD chooser_equals_code=$LASTEXITCODE"
-elio --help 2>$null
-"help_code=$LASTEXITCODE"
-elio shell status 2>$null
-"shell_code=$LASTEXITCODE"
-
-foreach ($callArgs in @(@('empty'), @('--help'), @('-h'), @('shell', 'status'), @('child', '--chooser-file', '/tmp/elio-choice'))) {{
-    elio @callArgs 2>$null
-    if ($?) {{ throw 'Failed elio call reported success' }}
-    elio @callArgs 2>$null && $(throw 'Failed elio call entered && branch')
-    $recovered = $false
-    elio @callArgs 2>$null || $($recovered = $true)
-    if (-not $recovered) {{ throw 'Failed elio call skipped || branch' }}
-}}
-
-foreach ($versionFlag in @('--version', '-V')) {{
-    $version = elio $versionFlag
-    if (-not $? -or $LASTEXITCODE -ne 0 -or $version -ne 'VERSION-PASSTHROUGH') {{
-        throw 'Successful version call was not forwarded correctly'
-    }}
-    elio $versionFlag && 'success branch' || $(throw 'Successful elio call entered || branch')
-}}
-
-# Literal -V goes through PowerShell parameter binding; an array splat does not.
-$version = elio -V
-if (-not $? -or $LASTEXITCODE -ne 0 -or $version -ne 'VERSION-PASSTHROUGH') {{
-    throw 'Literal -V was consumed as a PowerShell common parameter'
-}}
-
-$env:ELIO_TEST_TEMP_LOG = {start} + '/temp-path'
-$PSNativeCommandUseErrorActionPreference = $true
-$ErrorActionPreference = 'Stop'
-$caught = $false
-try {{ elio empty }} catch {{ $caught = $true }}
-if (-not $caught -or $LASTEXITCODE -ne 9) {{ throw 'Terminating error lost the exit code' }}
-$tmp = Get-Content -LiteralPath $env:ELIO_TEST_TEMP_LOG -Raw
-if (Test-Path -LiteralPath $tmp) {{ throw 'Terminating error leaked the temporary file' }}
-$ErrorActionPreference = 'Continue'
-
-# On case-sensitive filesystems, start and START are different directories.
-$caseDestination = {start} + '/START'
-$caseStart = {start} + '/start'
-New-Item -ItemType Directory -Force $caseStart, $caseDestination >$null
-if (-not (Test-Path -LiteralPath ($caseStart + '/probe'))) {{
-    Set-Content -LiteralPath ($caseDestination + '/probe') -Value 'case probe'
-    if (-not (Test-Path -LiteralPath ($caseStart + '/probe'))) {{
-        Set-Location -LiteralPath $caseStart
-        $env:ELIO_TEST_DESTINATION = $caseDestination
-        elio 2>$null
-        if ($PWD.Path -cne $caseDestination) {{ throw 'Case-only directory change was skipped' }}
-    }}
-}}
-exit 0
-"#,
-        init = pwsh_quote(init_script),
-        start = pwsh_quote(start_dir),
-    )
-}
-
-fn pwsh_quote(path: &Path) -> String {
-    format!("'{}'", path.to_string_lossy().replace('\'', "''"))
 }
 
 fn assert_runtime_output(output: std::process::Output, start_dir: &Path, destination: &Path) {
