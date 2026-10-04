@@ -35,9 +35,9 @@ fn nu_binary_command(invocation: Option<&str>, executable: &Path) -> String {
 }
 
 /// PowerShell resolves a bare command name through functions before applications,
-/// so the wrapper cannot call `elio` by name without recursing into itself. Look
-/// the executable up as an application instead, which also survives upgrades that
-/// move the binary.
+/// so the wrapper cannot call `elio` by name without recursing into itself. A bare
+/// invocation is looked up as an application instead. pwsh passes the resolved path
+/// as argv[0], so scripts generated from pwsh pin the executable path.
 fn pwsh_binary_command(invocation: Option<&str>, executable: &Path) -> String {
     let Some(invocation) = invocation else {
         return pwsh_string_literal(executable);
