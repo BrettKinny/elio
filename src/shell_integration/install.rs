@@ -249,6 +249,10 @@ pub(super) fn write_text_atomic(path: &Path, contents: &str) -> Result<()> {
 
     let result = (|| -> Result<()> {
         match fs::metadata(&write_path) {
+            // Windows rejects a directory's attributes on a file, masking the real error.
+            Ok(metadata) if metadata.is_dir() => {
+                anyhow::bail!("failed to replace {}: is a directory", write_path.display());
+            }
             Ok(metadata) => temp_file
                 .set_permissions(metadata.permissions())
                 .with_context(|| format!("failed to set permissions on {}", temp_path.display()))?,
