@@ -1,3 +1,4 @@
+mod audio_preview;
 mod goto;
 mod key_bindings;
 mod layout;
@@ -13,6 +14,7 @@ mod ui;
 use std::path::Path;
 
 pub(crate) use self::{
+    audio_preview::AudioPreviewConfig,
     goto::{BuiltinGoto, GotoConfig, GotoEntrySpec},
     key_bindings::{
         Action, ChooserKeyAction, KeyBindings, KeyContext, KeyList, normalized_plain_key_char,
@@ -59,6 +61,10 @@ pub(crate) fn key_bindings() -> &'static KeyBindings {
 
 pub(crate) fn open() -> &'static OpenConfig {
     &loading::active_config().open
+}
+
+pub(crate) fn audio_preview() -> &'static AudioPreviewConfig {
+    &loading::active_config().audio_preview
 }
 
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]

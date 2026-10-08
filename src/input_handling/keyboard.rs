@@ -522,6 +522,7 @@ impl App {
                 });
                 self.status.clear();
             }
+            Action::PlayAudio => self.open_audio_preview(),
             Action::Open => self.open_in_system()?,
             Action::OpenWith => self.open_open_with_overlay(),
             Action::OpenOrEnter => self.open_selected()?,
@@ -580,6 +581,50 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    /// Opens a TUI audio browser (default: `tap`) on the selected audio file
+    /// or directory. Files that are not audio and are not directories are a
+    /// no-op with a status hint.
+    pub(crate) fn open_audio_preview(&mut self) {
+        let Some(entry) = self.file_browser.selected_entry().cloned() else {
+            return;
+        };
+        self.open_audio_preview_for_entry(&entry);
+    }
+
+    pub(crate) fn open_audio_preview_for_entry(
+        &mut self,
+        entry: &crate::filesystem::Entry,
+    ) -> bool {
+        let is_directory = entry.is_dir()
+            || entry
+                .symlink
+                .as_ref()
+                .is_some_and(|symlink| symlink.target_kind.is_some());
+        let is_audio = !is_directory
+            && crate::file_classification::inspect_entry_cached(entry).builtin_class
+                == crate::file_classification::FileClass::Audio;
+        if !is_directory && !is_audio {
+            self.status =
+                "Audio preview works on audio files and folders (set [audio_preview] command)"
+                    .to_string();
+            return false;
+        }
+        let config = crate::config::audio_preview();
+        let program = config.program_name().unwrap_or_default().to_string();
+        if !crate::terminal_images::command_exists(&program) {
+            self.status = format!(
+                "{program} is not on PATH — install it to enable audio preview"
+            );
+            return false;
+        }
+        self.pending_terminal_task = Some(PendingTerminalTask::PlayAudio {
+            command: config.command_for_path(&entry.path),
+            target: entry.path.clone(),
+        });
+        self.status.clear();
+        true
     }
 
     pub(crate) fn key_context(&self) -> crate::config::KeyContext {
@@ -740,6 +785,7 @@ pub(super) fn fullscreen_preview_exits_then_dispatches(action: crate::config::Ac
             | Action::Open
             | Action::Zoxide
             | Action::ShellHere
+            | Action::PlayAudio
             | Action::Create
             | Action::Rename
             | Action::RenameInEditor

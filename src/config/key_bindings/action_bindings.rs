@@ -26,6 +26,7 @@ pub(crate) enum Action {
     FindDuplicates,
     Zoxide,
     ShellHere,
+    PlayAudio,
     Open,
     OpenWith,
     OpenOrEnter,
@@ -464,6 +465,7 @@ pub(crate) struct KeyBindings {
     pub find_duplicates: KeyList,
     pub zoxide: KeyList,
     pub shell: KeyList,
+    pub play_audio: KeyList,
     pub open: KeyList,
     pub open_with: KeyList,
     pub open_or_enter: KeyList,
@@ -539,7 +541,7 @@ impl KeyBindings {
             .collect()
     }
 
-    fn bindings(&self) -> [(&KeyList, Action); 50] {
+    fn bindings(&self) -> [(&KeyList, Action); 51] {
         [
             (&self.quit, Action::Quit),
             (&self.quit_without_cd, Action::QuitWithoutCd),
@@ -563,6 +565,7 @@ impl KeyBindings {
             (&self.find_duplicates, Action::FindDuplicates),
             (&self.zoxide, Action::Zoxide),
             (&self.shell, Action::ShellHere),
+            (&self.play_audio, Action::PlayAudio),
             (&self.open, Action::Open),
             (&self.open_with, Action::OpenWith),
             (&self.open_or_enter, Action::OpenOrEnter),

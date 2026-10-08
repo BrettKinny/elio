@@ -348,6 +348,37 @@ pub(crate) fn run_portal_chooser(
         .ok_or_else(|| anyhow::anyhow!("portal chooser exited without a result"))
 }
 
+/// Run the configured audio-preview command (default: `tap {path}`) synchronously
+/// in the real terminal, rooted at the selected file or folder. The command may
+/// contain a single `{path}` placeholder; without one, the path is appended as a
+/// plain argument. Runs in the target's parent directory.
+fn run_audio_preview_in_terminal(
+    command: &str,
+    target: &Path,
+) -> std::io::Result<std::process::ExitStatus> {
+    let target_lossy = target.to_string_lossy().into_owned();
+    let cwd = target.parent().unwrap_or(target);
+    let substituted = command.replace("{path}", &target_lossy);
+    let tokens: Vec<&str> = substituted.split_whitespace().collect();
+    let Some((program, args)) = tokens.split_first() else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "empty audio preview command",
+        ));
+    };
+    let mut args: Vec<&str> = args.to_vec();
+    if !command.contains("{path}") {
+        args.push(target_lossy.as_str());
+    }
+
+    let mut spawned = Command::new(program);
+    spawned.args(&args).env("PWD", cwd);
+    #[cfg(unix)]
+    crate::elevated_session::prepare_external(&mut spawned, Some(cwd))?;
+    spawned.current_dir(cwd);
+    spawned.status()
+}
+
 fn run_open_command_in_terminal(
     program: &str,
     args: &[String],
@@ -780,6 +811,18 @@ fn run_app(
                         match shell_result {
                             Ok(()) => refresh_after_shell(&mut app, &cwd),
                             Err(error) => app.set_status_message(error),
+                        }
+                        None
+                    }
+                    PendingTerminalTask::PlayAudio { command, target } => {
+                        input_reader.set_paused(true);
+                        suspend_terminal(terminal, drainer, true, kitty_dnd)?;
+                        let result = run_audio_preview_in_terminal(&command, &target);
+                        resume_terminal(terminal, drainer, kitty_dnd)?;
+                        app.invalidate_terminal_image_overlay_after_terminal_task();
+                        input_reader.set_paused(false);
+                        if let Err(error) = result {
+                            app.set_status_message(format!("Could not open audio preview: {error}"));
                         }
                         None
                     }

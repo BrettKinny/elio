@@ -35,6 +35,7 @@ pub(in crate::config) struct KeysConfigOverride {
     pub(super) find_duplicates: Option<KeyConfigOverride>,
     pub(super) zoxide: Option<KeyConfigOverride>,
     pub(super) shell: Option<KeyConfigOverride>,
+    pub(super) play_audio: Option<KeyConfigOverride>,
     pub(super) open: Option<KeyConfigOverride>,
     pub(super) open_with: Option<KeyConfigOverride>,
     pub(super) open_or_enter: Option<KeyConfigOverride>,

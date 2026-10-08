@@ -66,6 +66,7 @@ fn fullscreen_preview_explicit_commands_exit_before_dispatch() {
         Action::Open,
         Action::Zoxide,
         Action::ShellHere,
+        Action::PlayAudio,
         Action::Create,
         Action::Rename,
         Action::RenameInEditor,
@@ -78,6 +79,59 @@ fn fullscreen_preview_explicit_commands_exit_before_dispatch() {
             "{action:?} should be allowed from fullscreen preview"
         );
     }
+}
+
+#[test]
+fn play_audio_queues_terminal_task_for_audio_file() {
+    let mut app = App::new().expect("app should start");
+    let entry = crate::filesystem::Entry {
+        path: PathBuf::from("/tmp/track.mp3"),
+        name: "track.mp3".to_string(),
+        name_key: "track.mp3".to_string(),
+        ..crate::filesystem::Entry::default()
+    };
+    assert!(app.open_audio_preview_for_entry(&entry));
+    let PendingTerminalTask::PlayAudio { command, target } =
+        app.pending_terminal_task.expect("play audio task should be queued")
+    else {
+        panic!("expected a PlayAudio terminal task");
+    };
+    assert_eq!(command, "tap /tmp/track.mp3");
+    assert_eq!(target, PathBuf::from("/tmp/track.mp3"));
+}
+
+#[test]
+fn play_audio_queues_terminal_task_for_directory() {
+    let mut app = App::new().expect("app should start");
+    let entry = crate::filesystem::Entry {
+        path: PathBuf::from("/tmp/music"),
+        name: "music".to_string(),
+        name_key: "music".to_string(),
+        kind: crate::filesystem::EntryKind::Directory,
+        ..crate::filesystem::Entry::default()
+    };
+    assert!(app.open_audio_preview_for_entry(&entry));
+    let PendingTerminalTask::PlayAudio { command, target } =
+        app.pending_terminal_task.expect("play audio task should be queued")
+    else {
+        panic!("expected a PlayAudio terminal task");
+    };
+    assert_eq!(command, "tap /tmp/music");
+    assert_eq!(target, PathBuf::from("/tmp/music"));
+}
+
+#[test]
+fn play_audio_rejects_non_audio_files() {
+    let mut app = App::new().expect("app should start");
+    let entry = crate::filesystem::Entry {
+        path: PathBuf::from("/tmp/readme.md"),
+        name: "readme.md".to_string(),
+        name_key: "readme.md".to_string(),
+        ..crate::filesystem::Entry::default()
+    };
+    assert!(!app.open_audio_preview_for_entry(&entry));
+    assert!(app.pending_terminal_task.is_none());
+    assert!(app.status.contains("audio"));
 }
 
 #[test]

@@ -60,6 +60,7 @@ pub(in crate::ui) fn render_help_overlay(
         keys.action(&kb.create_archive, "create archive"),
         keys.action(&kb.shell, "open shell here"),
         keys.action(&kb.open, "open with default app"),
+        keys.action_with_suffix(&kb.play_audio, " (audio/folder)", "audio quick preview"),
         keys.action(&kb.open_with, "open with"),
     ]);
     let quit_action = if mode.is_chooser() {

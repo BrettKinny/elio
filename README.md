@@ -305,6 +305,7 @@ https://elio-fm.github.io/docs/configuration/
 | `o` `*` | Open focused item or selection with the system default application |
 | `O` `*` | Open With chooser |
 | `!` `*` | Open shell in current folder |
+| `i` `*` | Audio quick preview (audio file or folder, via `tap`) |
 | `a` `*` | Create file or folder |
 | `d` / `Del` `*` | Trash; permanently delete if already in trash |
 | `D` / `Shift+Del` `*` | Delete permanently |

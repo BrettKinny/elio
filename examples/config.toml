@@ -21,6 +21,7 @@
 
 # Customize the Places pane. `entries` controls the pinned items in order;
 # `show_devices` keeps or hides the auto-detected Devices section.
+# `device_entries` replaces auto-detected Devices with named paths in order.
 # Omit [places] entirely to keep the exact default sidebar.
 #
 # Built-in names: home, desktop, documents, downloads, pictures, music,
@@ -35,6 +36,10 @@
 #
 # [places]
 # show_devices = true
+# device_entries = [
+#   { title = "External", path = "~/mnt/external" },
+#   { title = "Tower", path = "~/mnt/tower" },
+# ]
 # entries = [
 #   "home",
 #   "desktop",
@@ -163,6 +168,7 @@
 # find_duplicates      = "alt+d"
 # zoxide               = "z"
 # shell                = "!"
+# play_audio           = "i"  # audio quick preview (tap or other TUI player)
 # open                 = "o"
 # open_with            = "O"
 # open_or_enter        = "enter"

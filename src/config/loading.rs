@@ -1,6 +1,6 @@
 use super::{
-    GotoConfig, KeyBindings, LayoutConfig, OpenConfig, PlacesConfig, PortalConfig, PreviewConfig,
-    UiConfig,
+    AudioPreviewConfig, GotoConfig, KeyBindings, LayoutConfig, OpenConfig, PlacesConfig,
+    PortalConfig, PreviewConfig, UiConfig,
 };
 #[cfg(unix)]
 use crate::elevated_session::InvocationContext;
@@ -21,6 +21,7 @@ pub(super) struct Config {
     pub(super) layout: LayoutConfig,
     pub(super) keys: KeyBindings,
     pub(super) open: OpenConfig,
+    pub(super) audio_preview: AudioPreviewConfig,
     pub(super) portal: PortalConfig,
 }
 
@@ -33,6 +34,7 @@ struct ConfigFile {
     layout: Option<super::layout::LayoutConfigOverride>,
     keys: Option<super::key_bindings::KeysConfigOverride>,
     open: Option<super::open::OpenConfigOverride>,
+    audio_preview: Option<super::audio_preview::AudioPreviewConfigOverride>,
     portal: Option<super::portal::PortalConfigOverride>,
 }
 
@@ -171,6 +173,7 @@ impl Config {
             layout: LayoutConfig::default(),
             keys: KeyBindings::default(),
             open: OpenConfig::default(),
+            audio_preview: AudioPreviewConfig::default(),
             portal: PortalConfig::default(),
         }
     }
@@ -201,6 +204,10 @@ impl Config {
         }
         if let Some(open) = parsed.open {
             resolved.open = OpenConfig::from_override(open, &resolved.open);
+        }
+        if let Some(audio_preview) = parsed.audio_preview {
+            resolved.audio_preview =
+                AudioPreviewConfig::from_override(audio_preview, &resolved.audio_preview);
         }
         if let Some(portal) = parsed.portal {
             resolved.portal.apply_override(portal);

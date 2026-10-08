@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added audio quick preview: press `i` (configurable via `[keys] play_audio`) on an audio file or folder to open the `tap` TUI audio browser in the current terminal. The launch command is configurable via the new `[audio_preview] command` setting (default `tap {path}`) so any path-accepting TUI player (e.g. `trix`) can be swapped in. If the player binary is not on `$PATH`, the binding is a no-op with a status hint.
 - Added XDG Desktop Portal FileChooser integration on Linux and FreeBSD, allowing elio to serve as the file chooser for desktop applications via `elio portal enable`, with independent routing for different desktop environments or window managers.
 - Added a Nix flake.
 - Added `Tab` as a keybinding to switch between files and folders in Fuzzy Find without clearing the query. ([#296])

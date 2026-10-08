@@ -29,6 +29,8 @@ fn keys_default_bindings_are_sane() {
     assert_eq!(config.keys.quit_without_cd, 'Q');
     assert_eq!(config.keys.zoxide, 'z');
     assert_eq!(config.keys.shell, '!');
+    assert_eq!(config.keys.play_audio, 'i');
+    assert_eq!(config.keys.action_for('i'), Some(Action::PlayAudio));
 }
 
 #[test]

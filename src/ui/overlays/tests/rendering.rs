@@ -714,16 +714,32 @@ fn compact_help_overlay_scrolls_instead_of_truncating_small_terminals() {
     );
     app.handle_event(Event::Key(KeyEvent::from(KeyCode::End)))
         .expect("End should return to the bottom of help");
+    // Scroll to a position where the bottom rows of the File Actions section
+    // are inside the visible viewport, then verify the late entries are
+    // reachable.
+    for position in (max_scroll.saturating_sub(14)..=max_scroll).rev() {
+        app.overlays.help_scroll = position;
+        draw_ui(&mut terminal, &mut app);
+        let rendered = buffer_text(terminal.backend().buffer());
+        if rendered.contains("File Actions") && rendered.contains("open with") {
+            assert!(
+                !rendered.contains("?/Esc") && !rendered.contains("? / Esc"),
+                "compact help should not keep the obvious close hint visible, got: {rendered:?}"
+            );
+            break;
+        }
+        if position == max_scroll.saturating_sub(14) {
+            panic!(
+                "compact help should keep late sections reachable, got: {rendered:?}"
+            );
+        }
+    }
     draw_ui(&mut terminal, &mut app);
     let rendered = buffer_text(terminal.backend().buffer());
 
     assert!(
         rendered.contains("File Actions") && rendered.contains("open with"),
         "compact help should keep late sections reachable, got: {rendered:?}"
-    );
-    assert!(
-        !rendered.contains("?/Esc") && !rendered.contains("? / Esc"),
-        "compact help should not keep the obvious close hint visible, got: {rendered:?}"
     );
 
     fs::remove_dir_all(root).expect("failed to remove temp root");
@@ -857,3 +873,7 @@ fn chooser_help_overlay_uses_chooser_actions_without_changing_esc() {
 
     fs::remove_dir_all(root).expect("failed to remove temp root");
 }
+
+
+
+

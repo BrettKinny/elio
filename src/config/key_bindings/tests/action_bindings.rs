@@ -457,3 +457,38 @@ shell = "S"
     assert_eq!(config.keys.action_for('S'), Some(Action::ShellHere));
     assert_eq!(config.keys.action_for('!'), None);
 }
+
+#[test]
+fn play_audio_defaults_to_i() {
+    let key_bindings = KeyBindings::default();
+    assert_eq!(key_bindings.play_audio, 'i');
+    assert_eq!(key_bindings.action_for('i'), Some(Action::PlayAudio));
+}
+
+#[test]
+fn play_audio_can_be_overridden() {
+    let config = Config::from_str(
+        r#"
+[keys]
+play_audio = "b"
+"#,
+    )
+    .expect("config should parse");
+    assert_eq!(config.keys.action_for('b'), Some(Action::PlayAudio));
+    // The default `i` is released when the binding is moved.
+    assert_eq!(config.keys.action_for('i'), None);
+}
+
+#[test]
+fn play_audio_collision_with_create_falls_back_to_default() {
+    let config = Config::from_str(
+        r#"
+[keys]
+create = "m"
+play_audio = "i"
+"#,
+    )
+    .expect("config should parse");
+    assert_eq!(config.keys.create, 'm');
+    assert_eq!(config.keys.play_audio, 'i');
+}

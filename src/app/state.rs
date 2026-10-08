@@ -132,6 +132,10 @@ pub(crate) enum PendingTerminalTask {
     ShellHere {
         cwd: PathBuf,
     },
+    PlayAudio {
+        command: String,
+        target: PathBuf,
+    },
     Zoxide,
 }
 

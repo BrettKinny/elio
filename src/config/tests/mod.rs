@@ -1,3 +1,4 @@
+mod audio_preview;
 mod goto;
 mod layout;
 mod open;

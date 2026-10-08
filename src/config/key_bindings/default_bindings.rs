@@ -35,6 +35,7 @@ impl Default for KeyBindings {
             find_duplicates: KeyList(vec![KeySpec::alt_char('d')]),
             zoxide: KeyList::one('z'),
             shell: KeyList::one('!'),
+            play_audio: KeyList::one('i'),
             open: KeyList::one('o'),
             open_with: KeyList::one('O'),
             open_or_enter: KeyList(vec![KeySpec::named(NamedKey::Enter)]),
