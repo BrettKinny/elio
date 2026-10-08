@@ -39,6 +39,47 @@ fn context_for(root: &Path) -> PlaceResolutionContext {
 }
 
 #[test]
+fn named_device_entries_replace_detected_mounts_and_keep_devices_section() {
+    let root = temp_path("named-devices");
+    let context = context_for(&root);
+    let tower = root.join("tower");
+    let cloud = root.join("iCloud");
+    let places = PlacesConfig {
+        show_devices: true,
+        entries: vec![PlaceEntrySpec::Builtin {
+            place: BuiltinPlace::Home,
+            icon: None,
+        }],
+        device_entries: Some(vec![
+            PlaceEntrySpec::Custom {
+                title: "Tower".to_string(),
+                path: tower.clone(),
+                icon: None,
+            },
+            PlaceEntrySpec::Custom {
+                title: "iCloud".to_string(),
+                path: cloud.clone(),
+                icon: None,
+            },
+        ]),
+    };
+
+    let rows = build_place_rows_with_context(&places, &context);
+    assert!(matches!(&rows[1], PlaceRow::Section { title: "Devices" }));
+    assert!(matches!(
+        &rows[2],
+        PlaceRow::Item(item) if item.title == "Tower" && item.path == tower
+            && item.kind == PlaceKind::Device { removable: false }
+    ));
+    assert!(matches!(
+        &rows[3],
+        PlaceRow::Item(item) if item.title == "iCloud" && item.path == cloud
+    ));
+    assert_eq!(rows.len(), 4);
+    fs::remove_dir_all(root).expect("failed to remove temp root");
+}
+
+#[test]
 fn personal_dir_uses_current_resolution_for_normal_sessions() {
     let home = temp_path("normal-home");
     let localized = home.join("Descargas");
@@ -168,6 +209,7 @@ fn configured_places_order_and_semantic_kinds_are_preserved() {
     let context = context_for(&root);
     let projects = root.join("projects");
     let places = PlacesConfig {
+        device_entries: None,
         show_devices: false,
         entries: vec![
             PlaceEntrySpec::Builtin {
@@ -216,6 +258,7 @@ fn missing_builtin_places_are_skipped_but_nonexistent_custom_places_stay_visible
     let context = context_for(&root);
     let future_mount = root.join("mnt").join("camera");
     let places = PlacesConfig {
+        device_entries: None,
         show_devices: false,
         entries: vec![
             PlaceEntrySpec::Builtin {
@@ -264,6 +307,7 @@ fn localized_builtin_places_show_resolved_folder_name() {
         trash: None,
     };
     let places = PlacesConfig {
+        device_entries: None,
         show_devices: false,
         entries: vec![PlaceEntrySpec::Builtin {
             place: BuiltinPlace::Downloads,
@@ -287,6 +331,7 @@ fn places_deduplicate_entries_by_resolved_path() {
     let root = temp_path("dedupe-sidebar");
     let context = context_for(&root);
     let places = PlacesConfig {
+        device_entries: None,
         show_devices: false,
         entries: vec![
             PlaceEntrySpec::Builtin {
@@ -332,6 +377,7 @@ fn custom_symlinked_places_store_resolved_identity_path() {
     fs::create_dir_all(&target).expect("failed to create target dir");
     symlink(&target, &linked).expect("failed to create symlinked place");
     let places = PlacesConfig {
+        device_entries: None,
         show_devices: false,
         entries: vec![PlaceEntrySpec::Custom {
             title: "Linked".to_string(),
@@ -398,6 +444,7 @@ fn symlinked_places_use_link_icon_unless_icon_is_configured() {
         trash: None,
     };
     let places = PlacesConfig {
+        device_entries: None,
         show_devices: false,
         entries: vec![
             PlaceEntrySpec::Builtin {

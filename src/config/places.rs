@@ -5,12 +5,14 @@ use std::path::{Path, PathBuf};
 pub(crate) struct PlacesConfig {
     pub show_devices: bool,
     pub entries: Vec<PlaceEntrySpec>,
+    pub device_entries: Option<Vec<PlaceEntrySpec>>,
 }
 
 impl Default for PlacesConfig {
     fn default() -> Self {
         Self {
             show_devices: true,
+            device_entries: None,
             entries: vec![
                 PlaceEntrySpec::builtin(BuiltinPlace::Home),
                 PlaceEntrySpec::builtin(BuiltinPlace::Desktop),
@@ -56,6 +58,7 @@ pub(crate) enum PlaceEntrySpec {
 pub(super) struct PlacesConfigOverride {
     show_devices: Option<bool>,
     entries: Option<Vec<toml::Value>>,
+    device_entries: Option<Vec<toml::Value>>,
 }
 
 impl PlacesConfig {
@@ -72,6 +75,28 @@ impl PlacesConfig {
                     PlaceEntrySpec::from_toml_value(entry, &format!("places.entries[{index}]"))
                 })
                 .collect();
+        }
+        if let Some(entries) = overrides.device_entries {
+            resolved.device_entries = Some(
+                entries
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, entry)| {
+                        let parsed = PlaceEntrySpec::from_toml_value(
+                            entry,
+                            &format!("places.device_entries[{index}]"),
+                        )?;
+                        if matches!(parsed, PlaceEntrySpec::Custom { .. }) {
+                            Some(parsed)
+                        } else {
+                            eprintln!(
+                                "elio: places.device_entries[{index}]: expected a custom title and path; skipping entry"
+                            );
+                            None
+                        }
+                    })
+                    .collect(),
+            );
         }
         resolved
     }

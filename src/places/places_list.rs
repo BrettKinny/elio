@@ -141,10 +141,25 @@ pub(super) fn build_place_rows_with_context(
         .into_iter()
         .map(PlaceRow::Item)
         .collect::<Vec<_>>();
-    let device_items = if places.show_devices {
-        mounted_device_items(&context.home, &pinned_paths)
-    } else {
+    let device_items = if !places.show_devices {
         Vec::new()
+    } else if let Some(entries) = &places.device_entries {
+        let mut seen = pinned_paths;
+        entries
+            .iter()
+            .filter_map(|entry| match entry {
+                PlaceEntrySpec::Custom { title, path, icon } => Some(place_item(
+                    PlaceKind::Device { removable: false },
+                    title.clone(),
+                    place_icon(path, icon.as_deref(), "󰋊"),
+                    path.clone(),
+                )),
+                _ => None,
+            })
+            .filter(|item| seen.insert(item.identity_path.clone()))
+            .collect()
+    } else {
+        mounted_device_items(&context.home, &pinned_paths)
     };
     if !device_items.is_empty() {
         rows.push(PlaceRow::Section { title: "Devices" });

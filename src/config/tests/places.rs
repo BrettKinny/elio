@@ -87,6 +87,26 @@ entries = [
 }
 
 #[test]
+fn config_can_replace_auto_detected_devices_with_named_paths() {
+    let config = Config::from_str(
+        r#"
+[places]
+device_entries = [
+  { title = "External", path = "~/mnt/external" },
+  { title = "Tower", path = "~/mnt/tower" },
+]
+"#,
+    )
+    .expect("config should parse");
+
+    assert_eq!(config.places.device_entries.as_ref().map(Vec::len), Some(2));
+    assert!(matches!(
+        &config.places.device_entries.as_ref().unwrap()[0],
+        PlaceEntrySpec::Custom { title, .. } if title == "External"
+    ));
+}
+
+#[test]
 fn config_places_skips_relative_custom_paths_without_failing_parse() {
     let config = Config::from_str(
         r#"
