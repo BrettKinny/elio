@@ -1,9 +1,11 @@
+use crate::places::PlacesMode;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct PlacesConfig {
     pub show_devices: bool,
+    pub default_mode: PlacesMode,
     pub entries: Vec<PlaceEntrySpec>,
 }
 
@@ -11,6 +13,7 @@ impl Default for PlacesConfig {
     fn default() -> Self {
         Self {
             show_devices: true,
+            default_mode: PlacesMode::Expanded,
             entries: vec![
                 PlaceEntrySpec::builtin(BuiltinPlace::Home),
                 PlaceEntrySpec::builtin(BuiltinPlace::Desktop),
@@ -55,6 +58,7 @@ pub(crate) enum PlaceEntrySpec {
 #[derive(Deserialize, Default)]
 pub(super) struct PlacesConfigOverride {
     show_devices: Option<bool>,
+    default_mode: Option<PlacesMode>,
     entries: Option<Vec<toml::Value>>,
 }
 
@@ -63,6 +67,9 @@ impl PlacesConfig {
         let mut resolved = defaults.clone();
         if let Some(show_devices) = overrides.show_devices {
             resolved.show_devices = show_devices;
+        }
+        if let Some(default_mode) = overrides.default_mode {
+            resolved.default_mode = default_mode;
         }
         if let Some(entries) = overrides.entries {
             resolved.entries = entries

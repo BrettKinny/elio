@@ -3,7 +3,7 @@ use super::super::places_list::parse_user_dir;
 use super::super::places_list::{
     PlaceResolutionContext, build_place_rows_with_context, resolve_personal_dir,
 };
-use super::super::{PlaceKind, PlaceRow};
+use super::super::{PlaceKind, PlaceRow, PlacesMode};
 use crate::config::{BuiltinPlace, PlaceEntrySpec, PlacesConfig};
 use std::{
     fs,
@@ -169,6 +169,7 @@ fn configured_places_order_and_semantic_kinds_are_preserved() {
     let projects = root.join("projects");
     let places = PlacesConfig {
         show_devices: false,
+        default_mode: PlacesMode::Expanded,
         entries: vec![
             PlaceEntrySpec::Builtin {
                 place: BuiltinPlace::Downloads,
@@ -217,6 +218,7 @@ fn missing_builtin_places_are_skipped_but_nonexistent_custom_places_stay_visible
     let future_mount = root.join("mnt").join("camera");
     let places = PlacesConfig {
         show_devices: false,
+        default_mode: PlacesMode::Expanded,
         entries: vec![
             PlaceEntrySpec::Builtin {
                 place: BuiltinPlace::Desktop,
@@ -265,6 +267,7 @@ fn localized_builtin_places_show_resolved_folder_name() {
     };
     let places = PlacesConfig {
         show_devices: false,
+        default_mode: PlacesMode::Expanded,
         entries: vec![PlaceEntrySpec::Builtin {
             place: BuiltinPlace::Downloads,
             icon: None,
@@ -288,6 +291,7 @@ fn places_deduplicate_entries_by_resolved_path() {
     let context = context_for(&root);
     let places = PlacesConfig {
         show_devices: false,
+        default_mode: PlacesMode::Expanded,
         entries: vec![
             PlaceEntrySpec::Builtin {
                 place: BuiltinPlace::Home,
@@ -333,6 +337,7 @@ fn custom_symlinked_places_store_resolved_identity_path() {
     symlink(&target, &linked).expect("failed to create symlinked place");
     let places = PlacesConfig {
         show_devices: false,
+        default_mode: PlacesMode::Expanded,
         entries: vec![PlaceEntrySpec::Custom {
             title: "Linked".to_string(),
             path: linked.clone(),
@@ -399,6 +404,7 @@ fn symlinked_places_use_link_icon_unless_icon_is_configured() {
     };
     let places = PlacesConfig {
         show_devices: false,
+        default_mode: PlacesMode::Expanded,
         entries: vec![
             PlaceEntrySpec::Builtin {
                 place: BuiltinPlace::Downloads,

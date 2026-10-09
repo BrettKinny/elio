@@ -1,4 +1,5 @@
 use super::{super::*, toml_string};
+use crate::places::PlacesMode;
 
 #[test]
 fn config_defaults_places_to_builtin_sidebar_and_devices() {
@@ -244,4 +245,37 @@ fn custom_places_accept_absolute_paths() {
         super::super::places::expand_custom_place_path(&path_str).expect("path should parse"),
         path
     );
+}
+
+#[test]
+fn config_places_default_mode_defaults_and_valid_values() {
+    assert_eq!(
+        Config::default_config().places.default_mode,
+        PlacesMode::Expanded
+    );
+    for (value, expected) in [
+        ("expanded", PlacesMode::Expanded),
+        ("collapsed", PlacesMode::Collapsed),
+        ("hidden", PlacesMode::Hidden),
+    ] {
+        let config = Config::from_str(&format!(
+            "[places]
+default_mode = {value:?}"
+        ))
+        .unwrap();
+        assert_eq!(config.places.default_mode, expected);
+    }
+}
+
+#[test]
+fn config_places_default_mode_rejects_invalid_values() {
+    for value in ["\"icons\"", "\"Collapsed\"", "\"\"", "1", "true"] {
+        assert!(
+            Config::from_str(&format!(
+                "[places]
+default_mode = {value}"
+            ))
+            .is_err()
+        );
+    }
 }

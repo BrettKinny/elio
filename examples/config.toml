@@ -35,6 +35,7 @@
 #
 # [places]
 # show_devices = true
+# default_mode = "expanded"  # startup sidebar: expanded, collapsed, or hidden (cycle with B)
 # entries = [
 #   "home",
 #   "desktop",

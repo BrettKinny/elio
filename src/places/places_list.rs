@@ -60,7 +60,8 @@ pub enum PlaceRow {
     Item(PlaceItem),
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum PlacesMode {
     #[default]
     Expanded,

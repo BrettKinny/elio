@@ -210,6 +210,7 @@ impl App {
             pending_terminal_task: None,
         };
         app.file_browser.sort_mode = crate::config::ui().default_sort;
+        app.places.mode = crate::config::places().default_mode;
         app.file_browser.in_trash = crate::places::path_is_trash(&app.file_browser.cwd);
         let snapshot = crate::filesystem::load_directory_snapshot(
             &app.file_browser.cwd,
