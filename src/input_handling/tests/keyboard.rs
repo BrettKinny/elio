@@ -585,7 +585,7 @@ fn capital_v_toggles_preview_pane() {
 }
 
 #[test]
-fn ctrl_b_cycles_places_mode() {
+fn capital_b_cycles_places_mode() {
     let root = temp_path("toggle-places-pane");
     fs::create_dir_all(&root).expect("failed to create temp root");
 
@@ -597,11 +597,8 @@ fn ctrl_b_cycles_places_mode() {
         (PlacesMode::Hidden, "Places hidden"),
         (PlacesMode::Expanded, "Places expanded"),
     ] {
-        app.handle_event(Event::Key(KeyEvent::new(
-            KeyCode::Char('b'),
-            KeyModifiers::CONTROL,
-        )))
-        .expect("ctrl-b should cycle places mode");
+        app.handle_event(Event::Key(KeyEvent::from(KeyCode::Char('B'))))
+            .expect("B should cycle places mode");
         assert_eq!(app.places.mode, mode);
         assert_eq!(app.status_message(), status);
     }

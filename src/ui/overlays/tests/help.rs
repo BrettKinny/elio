@@ -176,11 +176,11 @@ fn preview_scroll_help_uses_standard_uppercase_notation() {
     let kb = KeyBindings::from_toml_str(
         r#"[keys]
 scroll_preview_left = "A"
-scroll_preview_right = "B"
+scroll_preview_right = "W"
 "#,
     );
     let keys = HelpKeys::new(&kb, HelpMode::Normal);
 
     assert_eq!(keys.key(&kb.scroll_preview_left), "A");
-    assert_eq!(keys.key(&kb.scroll_preview_right), "B");
+    assert_eq!(keys.key(&kb.scroll_preview_right), "W");
 }
