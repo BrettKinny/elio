@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added XDG Desktop Portal FileChooser integration on Linux and FreeBSD, allowing elio to serve as the file chooser for desktop applications via `elio portal enable`, with independent routing for different desktop environments or window managers.
 - Added a Nix flake.
-- Added a configurable `toggle_places` (`B`) shortcut to cycle the places sidebar between expanded, icon-only and hidden.
+- Added a configurable `toggle_places` (`B`) shortcut to cycle the places sidebar between expanded, icon-only and hidden, plus `[places] default_mode` to pick the startup state.
 - Added `Tab` as a keybinding to switch between files and folders in Fuzzy Find without clearing the query. ([#296])
 - Added `[preview] tab_width` to configure tab width in text and code previews (1–16 columns, default 4). ([#292])
 - Added image preview support for Rio. ([#303])
