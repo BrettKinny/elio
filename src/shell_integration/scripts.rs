@@ -35,9 +35,9 @@ fn nu_binary_command(invocation: Option<&str>, executable: &Path) -> String {
 }
 
 /// PowerShell resolves a bare command name through functions before applications,
-/// so the wrapper cannot call `elio` by name without recursing into itself. Look
-/// the executable up as an application instead, which also survives upgrades that
-/// move the binary.
+/// so the wrapper cannot call `elio` by name without recursing into itself. A bare
+/// invocation is looked up as an application instead. pwsh passes the resolved path
+/// as argv[0], so scripts generated from pwsh pin the executable path.
 fn pwsh_binary_command(invocation: Option<&str>, executable: &Path) -> String {
     let Some(invocation) = invocation else {
         return pwsh_string_literal(executable);
@@ -218,8 +218,6 @@ fn pwsh_init_script(executable: &str) -> String {
         r#"function elio {{
     $elioExe = {executable}
     if (-not $elioExe) {{
-        # Set the status first: a caller with $ErrorActionPreference = 'Stop'
-        # never reaches the lines after Write-Error.
         $global:LASTEXITCODE = 127
         Write-Error 'elio: could not find the elio executable'
         return
@@ -227,7 +225,7 @@ fn pwsh_init_script(executable: &str) -> String {
 
     if ($args.Count -gt 0) {{
         $first = [string]$args[0]
-        if ($first -eq 'shell' -or $first -eq 'portal' -or $first.StartsWith('-')) {{
+        if ($first -ceq 'shell' -or $first -ceq 'portal' -or $first.StartsWith('-')) {{
             & $elioExe @args
             return
         }}
@@ -235,14 +233,13 @@ fn pwsh_init_script(executable: &str) -> String {
 
     foreach ($arg in $args) {{
         $value = [string]$arg
-        if ($value -eq '--chooser-file' -or $value.StartsWith('--chooser-file=')) {{
+        if ($value -ceq '--chooser-file' -or $value.StartsWith('--chooser-file=')) {{
             & $elioExe @args
             return
         }}
     }}
 
     $tmp = [System.IO.Path]::GetTempFileName()
-    $statusCode = 127
     try {{
         & $elioExe --cwd-file $tmp @args
         $statusCode = $LASTEXITCODE
@@ -250,7 +247,7 @@ fn pwsh_init_script(executable: &str) -> String {
         if ($cwd) {{
             $cwd = $cwd.TrimEnd([char]13, [char]10)
         }}
-        if ($cwd -and $cwd -ne $PWD.Path -and (Test-Path -LiteralPath $cwd -PathType Container)) {{
+        if ($cwd -and $cwd -cne $PWD.Path -and (Test-Path -LiteralPath $cwd -PathType Container)) {{
             Set-Location -LiteralPath $cwd
         }}
     }} finally {{

@@ -3,9 +3,11 @@ use std::{
     env, fs, io,
     io::Write,
     path::{Path, PathBuf},
+    process::Command,
 };
 
 use super::Shell;
+use super::powershell::{PWSH_PROGRAM, ensure_supported_version};
 use super::scripts::{init_script, nu_string_literal, pwsh_string_literal, shell_quote};
 
 pub(crate) struct InstallReport {
@@ -26,35 +28,12 @@ pub(crate) const MANAGED_START: &str = "# >>> elio shell integration >>>";
 pub(crate) const MANAGED_END: &str = "# <<< elio shell integration <<<";
 
 pub(crate) fn install(shell: Shell, binary: &str) -> Result<InstallReport> {
-    let script = managed_script(shell, binary);
-    let path = integration_path(shell)?;
-
-    match shell {
-        Shell::Fish | Shell::Nu => {
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)
-                    .with_context(|| format!("failed to create {}", parent.display()))?;
-            }
-            if let Some(existing) = read_utf8_if_exists(&path)?
-                && !has_managed_block(&existing)?
-            {
-                anyhow::bail!(
-                    "error: refusing to overwrite {} because it is not managed by elio",
-                    path.display()
-                );
-            }
-            write_text_atomic(&path, &script)?;
-        }
-        Shell::Bash | Shell::Zsh | Shell::Pwsh => {
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)
-                    .with_context(|| format!("failed to create {}", parent.display()))?;
-            }
-            let existing = read_utf8_if_exists(&path)?.unwrap_or_default();
-            let updated = upsert_managed_block(&existing, &script)?;
-            write_text_atomic(&path, &updated)?;
-        }
+    if shell == Shell::Pwsh {
+        ensure_supported_version(Command::new(PWSH_PROGRAM))?;
     }
+
+    let path = integration_path(shell)?;
+    install_at(shell, &path, binary)?;
 
     Ok(InstallReport {
         shell,
@@ -63,12 +42,36 @@ pub(crate) fn install(shell: Shell, binary: &str) -> Result<InstallReport> {
     })
 }
 
+pub(super) fn install_at(shell: Shell, path: &Path, binary: &str) -> Result<()> {
+    let script = managed_script(shell, binary);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
+    }
+
+    match shell {
+        Shell::Fish | Shell::Nu => {
+            if let Some(existing) = read_utf8_if_exists(path)?
+                && !has_managed_block(&existing)?
+            {
+                anyhow::bail!(
+                    "error: refusing to overwrite {} because it is not managed by elio",
+                    path.display()
+                );
+            }
+            write_text_atomic(path, &script)
+        }
+        Shell::Bash | Shell::Zsh | Shell::Pwsh => {
+            let existing = read_utf8_if_exists(path)?.unwrap_or_default();
+            let updated = upsert_managed_block(&existing, &script)?;
+            write_text_atomic(path, &updated)
+        }
+    }
+}
+
 pub(crate) fn uninstall(shell: Shell) -> Result<UninstallReport> {
     let path = integration_path(shell)?;
-    let changed = match shell {
-        Shell::Fish | Shell::Nu => uninstall_managed_file(&path)?,
-        Shell::Bash | Shell::Zsh | Shell::Pwsh => uninstall_managed_block(&path)?,
-    };
+    let changed = uninstall_at(shell, &path)?;
 
     Ok(UninstallReport {
         shell,
@@ -79,7 +82,14 @@ pub(crate) fn uninstall(shell: Shell) -> Result<UninstallReport> {
     })
 }
 
-fn integration_path(shell: Shell) -> Result<PathBuf> {
+pub(super) fn uninstall_at(shell: Shell, path: &Path) -> Result<bool> {
+    match shell {
+        Shell::Fish | Shell::Nu => uninstall_managed_file(path),
+        Shell::Bash | Shell::Zsh | Shell::Pwsh => uninstall_managed_block(path),
+    }
+}
+
+pub(super) fn integration_path(shell: Shell) -> Result<PathBuf> {
     match shell {
         Shell::Fish => Ok(config_home_for_shell("fish")?.join("fish/conf.d/elio.fish")),
         Shell::Nu => Ok(config_home_for_shell("nu")?.join("nushell/autoload/elio.nu")),
@@ -89,13 +99,13 @@ fn integration_path(shell: Shell) -> Result<PathBuf> {
     }
 }
 
-/// PowerShell 7 current-user profile. On Windows it sits under the Documents known
+/// PowerShell 7.4+ current-user profile. On Windows it sits under the Documents known
 /// folder, which folder redirection and OneDrive move, so resolve it rather than
 /// joining onto the home directory. Elsewhere PowerShell follows XDG.
 #[cfg(windows)]
 fn pwsh_profile_path() -> Result<PathBuf> {
     let documents = dirs::document_dir()
-        .context("error: could not find your Documents folder for pwsh integration")?;
+        .context("error: could not find your Documents folder for PowerShell integration")?;
     Ok(pwsh_profile_in(&documents))
 }
 
@@ -239,6 +249,10 @@ pub(super) fn write_text_atomic(path: &Path, contents: &str) -> Result<()> {
 
     let result = (|| -> Result<()> {
         match fs::metadata(&write_path) {
+            // Windows rejects a directory's attributes on a file, masking the real error.
+            Ok(metadata) if metadata.is_dir() => {
+                anyhow::bail!("failed to replace {}: is a directory", write_path.display());
+            }
             Ok(metadata) => temp_file
                 .set_permissions(metadata.permissions())
                 .with_context(|| format!("failed to set permissions on {}", temp_path.display()))?,
@@ -257,7 +271,7 @@ pub(super) fn write_text_atomic(path: &Path, contents: &str) -> Result<()> {
             .with_context(|| format!("failed to sync {}", temp_path.display()))?;
         drop(temp_file);
 
-        replace_with_temp(&temp_path, &write_path)
+        fs::rename(&temp_path, &write_path)
             .with_context(|| format!("failed to replace {}", write_path.display()))?;
         sync_parent_dir(parent).with_context(|| format!("failed to sync {}", parent.display()))?;
         Ok(())
@@ -333,19 +347,6 @@ fn create_atomic_temp(path: &Path, parent: &Path) -> Result<(PathBuf, fs::File)>
         "failed to create a temporary shell integration file beside {}",
         path.display()
     )
-}
-
-#[cfg(windows)]
-fn replace_with_temp(temp_path: &Path, write_path: &Path) -> io::Result<()> {
-    if write_path.exists() {
-        fs::remove_file(write_path)?;
-    }
-    fs::rename(temp_path, write_path)
-}
-
-#[cfg(not(windows))]
-fn replace_with_temp(temp_path: &Path, write_path: &Path) -> io::Result<()> {
-    fs::rename(temp_path, write_path)
 }
 
 #[cfg(unix)]
