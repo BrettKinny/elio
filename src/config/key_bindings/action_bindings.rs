@@ -44,6 +44,7 @@ pub(crate) enum Action {
     Sort,
     ToggleView,
     TogglePreview,
+    TogglePlaces,
     FullscreenPreview,
     ToggleHidden,
     NavLeft,
@@ -482,6 +483,7 @@ pub(crate) struct KeyBindings {
     pub sort: KeyList,
     pub toggle_view: KeyList,
     pub toggle_preview: KeyList,
+    pub toggle_places: KeyList,
     pub fullscreen_preview: KeyList,
     pub toggle_hidden: KeyList,
     pub nav_left: KeyList,
@@ -539,7 +541,7 @@ impl KeyBindings {
             .collect()
     }
 
-    fn bindings(&self) -> [(&KeyList, Action); 50] {
+    fn bindings(&self) -> [(&KeyList, Action); 51] {
         [
             (&self.quit, Action::Quit),
             (&self.quit_without_cd, Action::QuitWithoutCd),
@@ -581,6 +583,7 @@ impl KeyBindings {
             (&self.sort, Action::Sort),
             (&self.toggle_view, Action::ToggleView),
             (&self.toggle_preview, Action::TogglePreview),
+            (&self.toggle_places, Action::TogglePlaces),
             (&self.fullscreen_preview, Action::FullscreenPreview),
             (&self.toggle_hidden, Action::ToggleHidden),
             (&self.nav_left, Action::NavLeft),

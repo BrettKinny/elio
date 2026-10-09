@@ -7,7 +7,7 @@ use super::super::places_pane::render_places_pane;
 use super::super::scrollbars::split_scrollbar_area;
 use crate::app::{App, ScreenRegions};
 use crate::config::PaneWeights;
-use crate::places::{PlaceItem, PlaceKind, PlaceRow};
+use crate::places::{PlaceItem, PlaceKind, PlaceRow, PlacesMode};
 use crate::preview::default_code_preview_line_limit;
 use crate::theme;
 use crate::ui;
@@ -221,6 +221,7 @@ fn wide_browser_layout_uses_default_sidebar_width() {
         None,
         true,
         false,
+        PlacesMode::Expanded,
     );
 
     let sidebar = layout.places.expect("sidebar should be visible");
@@ -255,6 +256,7 @@ fn narrowing_horizontal_browser_layout_starts_shrinking_sidebar_early() {
             None,
             true,
             false,
+            PlacesMode::Expanded,
         );
 
         assert_eq!(
@@ -284,6 +286,7 @@ fn narrow_legacy_layout_keeps_preview_without_starving_files() {
             None,
             true,
             false,
+            PlacesMode::Expanded,
         );
 
         let entries = layout.file_browser.expect("entries should be visible");
@@ -328,6 +331,7 @@ fn weighted_layout_splits_three_panes_across_the_available_width() {
         }),
         true,
         false,
+        PlacesMode::Expanded,
     );
 
     let sidebar = layout.places.expect("sidebar should be visible");
@@ -358,6 +362,7 @@ fn weighted_layout_can_hide_the_sidebar() {
         }),
         true,
         false,
+        PlacesMode::Expanded,
     );
 
     let entries = layout.file_browser.expect("entries should be visible");
@@ -369,6 +374,40 @@ fn weighted_layout_can_hide_the_sidebar() {
     assert_eq!(entries.width, 60);
     assert_eq!(preview.width, 50);
     assert_eq!(entries.x.saturating_add(entries.width), preview.x);
+}
+
+#[test]
+fn collapsed_and_hidden_places_give_content_the_freed_width() {
+    let area = Rect {
+        x: 0,
+        y: 0,
+        width: 140,
+        height: 20,
+    };
+    let weights = Some(PaneWeights {
+        places: 20,
+        files: 60,
+        preview: 60,
+    });
+
+    for (places_mode, rail_width) in [(PlacesMode::Collapsed, 5), (PlacesMode::Hidden, 0)] {
+        for (pane_weights, preview_visible) in [
+            (None, true),
+            (None, false),
+            (weights, true),
+            (weights, false),
+        ] {
+            let layout =
+                resolve_pane_layout(area, pane_weights, preview_visible, false, places_mode);
+            let entries = layout.file_browser.expect("entries should be visible");
+
+            assert_eq!(layout.places.map_or(0, |rail| rail.width), rail_width);
+            assert_eq!(entries.x, rail_width);
+            let content_width = entries.width + layout.preview.map_or(0, |preview| preview.width);
+            assert_eq!(content_width, 140 - rail_width);
+            assert_eq!(layout.preview.is_some(), preview_visible);
+        }
+    }
 }
 
 #[test]
@@ -387,6 +426,7 @@ fn weighted_layout_hides_the_preview_when_requested() {
         }),
         true,
         false,
+        PlacesMode::Expanded,
     );
 
     let sidebar = layout.places.expect("sidebar should be visible");
@@ -406,7 +446,7 @@ fn fullscreen_preview_uses_body_without_browser_panes() {
         width: 80,
         height: 20,
     };
-    let layout = resolve_pane_layout(area, None, true, true);
+    let layout = resolve_pane_layout(area, None, true, true, PlacesMode::Expanded);
 
     assert_eq!(layout.places, None);
     assert_eq!(layout.file_browser, None);
@@ -425,6 +465,7 @@ fn preview_toggle_hides_preview_without_collapsing_legacy_sidebar() {
         None,
         false,
         false,
+        PlacesMode::Expanded,
     );
 
     let sidebar = layout.places.expect("sidebar should be visible");
@@ -447,6 +488,7 @@ fn preview_toggle_keeps_icon_sidebar_at_stacked_breakpoint_width() {
         None,
         false,
         false,
+        PlacesMode::Expanded,
     );
 
     let sidebar = layout.places.expect("icon sidebar should stay visible");
@@ -473,6 +515,7 @@ fn preview_toggle_hides_preview_without_changing_config_weights() {
         }),
         false,
         false,
+        PlacesMode::Expanded,
     );
 
     let sidebar = layout.places.expect("sidebar should be visible");
@@ -498,6 +541,7 @@ fn weighted_layout_uses_horizontal_layout_when_visible_panes_fit_minimums() {
         }),
         true,
         false,
+        PlacesMode::Expanded,
     );
 
     let sidebar = layout.places.expect("sidebar should be visible");
@@ -528,6 +572,7 @@ fn weighted_layout_stacks_preview_when_width_is_tight_and_height_is_sufficient()
         }),
         true,
         false,
+        PlacesMode::Expanded,
     );
 
     let sidebar = layout.places.expect("sidebar should be visible");
@@ -557,6 +602,7 @@ fn weighted_stacked_layout_respects_file_and_preview_height_weights() {
         }),
         true,
         false,
+        PlacesMode::Expanded,
     );
 
     let sidebar = layout.places.expect("sidebar should be visible");
@@ -586,6 +632,7 @@ fn weighted_stacked_layout_can_favor_files_over_preview() {
         }),
         true,
         false,
+        PlacesMode::Expanded,
     );
 
     let entries = layout.file_browser.expect("entries should be visible");
@@ -613,6 +660,7 @@ fn weighted_layout_avoids_stacking_when_height_is_too_limited() {
         }),
         true,
         false,
+        PlacesMode::Expanded,
     );
 
     let sidebar = layout.places.expect("sidebar should be visible");

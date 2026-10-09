@@ -6,7 +6,7 @@ mod places_list;
 mod tests;
 
 pub use self::places_list::{PlaceItem, PlaceKind, PlaceRow};
-pub(crate) use self::places_list::{PlacesState, trash_dir};
+pub(crate) use self::places_list::{PlacesMode, PlacesState, trash_dir};
 
 pub(crate) fn path_is_trash(path: &std::path::Path) -> bool {
     crate::elevated_session::trash_home_dir()

@@ -183,6 +183,7 @@
 # sort                 = "s"
 # toggle_view          = "v"
 # toggle_preview       = "V"
+# toggle_places        = "ctrl+b"
 # fullscreen_preview   = "P"
 # toggle_hidden        = "."
 # scroll_preview_up    = ["K", "shift+up"]

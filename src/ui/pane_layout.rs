@@ -4,6 +4,7 @@ use super::preview_pane::render_preview_pane;
 use crate::{
     app::{App, ScreenRegions},
     config::{self, PaneWeights},
+    places::PlacesMode,
     theme::Palette,
 };
 use ratatui::{Frame, layout::Rect};
@@ -61,6 +62,7 @@ pub(in crate::ui) fn render_panes(
         config::layout().panes,
         app.preview_visible(),
         app.preview_fullscreen(),
+        app.places.mode,
     );
 
     if let Some(places) = layout.places {
@@ -79,6 +81,7 @@ pub(super) fn resolve_pane_layout(
     pane_weights: Option<PaneWeights>,
     preview_visible: bool,
     preview_fullscreen: bool,
+    places_mode: PlacesMode,
 ) -> PaneLayout {
     if preview_fullscreen {
         return PaneLayout {
@@ -88,14 +91,46 @@ pub(super) fn resolve_pane_layout(
         };
     }
 
+    // Collapsed: fixed icon rail, remaining panes laid out as if places were off.
+    if places_mode == PlacesMode::Collapsed
+        && pane_weights.is_none_or(|weights| weights.places > 0)
+        && let Some((rail, content)) = split_places_and_content(
+            area,
+            true,
+            LEGACY_ICON_ONLY_PLACES_WIDTH,
+            LEGACY_ICON_ONLY_PLACES_WIDTH,
+            LEGACY_MIN_CONTENT_WIDTH_WITH_PLACES,
+        )
+    {
+        return PaneLayout {
+            places: non_empty(rail),
+            ..resolve_browser_panes(content, pane_weights, preview_visible, false)
+        };
+    }
+
+    let places_visible = places_mode != PlacesMode::Hidden;
+    resolve_browser_panes(area, pane_weights, preview_visible, places_visible)
+}
+
+fn resolve_browser_panes(
+    area: Rect,
+    pane_weights: Option<PaneWeights>,
+    preview_visible: bool,
+    places_visible: bool,
+) -> PaneLayout {
+    let pane_weights = pane_weights.map(|weights| PaneWeights {
+        places: if places_visible { weights.places } else { 0 },
+        ..weights
+    });
+
     if preview_visible {
         pane_weights.map_or_else(
-            || legacy_pane_layout(area),
+            || legacy_pane_layout(area, places_visible),
             |weights| custom_pane_layout(area, weights),
         )
     } else {
         pane_weights.map_or_else(
-            || legacy_preview_hidden_pane_layout(area),
+            || legacy_preview_hidden_pane_layout(area, places_visible),
             |weights| {
                 custom_pane_layout(
                     area,
@@ -110,32 +145,33 @@ pub(super) fn resolve_pane_layout(
     }
 }
 
-fn legacy_pane_layout(area: Rect) -> PaneLayout {
+fn legacy_pane_layout(area: Rect, show_places: bool) -> PaneLayout {
     let preferred_stacked = (area.width <= LEGACY_STACKED_PREFERRED_MAX_WIDTH)
-        .then(|| legacy_stacked_pane_layout(area))
+        .then(|| legacy_stacked_pane_layout(area, show_places))
         .flatten();
     if let Some(layout) = preferred_stacked {
         return layout;
     }
 
-    if let Some(layout) = legacy_horizontal_pane_layout(area) {
+    if let Some(layout) = legacy_horizontal_pane_layout(area, show_places) {
         return layout;
     }
 
-    if let Some(layout) = legacy_stacked_pane_layout(area) {
+    if let Some(layout) = legacy_stacked_pane_layout(area, show_places) {
         return layout;
     }
 
-    if let Some(layout) = legacy_best_effort_stacked_pane_layout(area) {
+    if let Some(layout) = legacy_best_effort_stacked_pane_layout(area, show_places) {
         return layout;
     }
 
-    legacy_places_and_file_browser_layout(area)
+    legacy_places_and_file_browser_layout(area, show_places)
 }
 
-fn legacy_horizontal_pane_layout(area: Rect) -> Option<PaneLayout> {
+fn legacy_horizontal_pane_layout(area: Rect, show_places: bool) -> Option<PaneLayout> {
     let (places, content) = split_places_and_content_with_comfort(
         area,
+        show_places,
         LEGACY_WIDE_PLACES_WIDTH,
         LEGACY_ICON_ONLY_PLACES_WIDTH,
         LEGACY_HORIZONTAL_CONTENT_MIN_WIDTH,
@@ -169,9 +205,10 @@ fn legacy_horizontal_pane_layout(area: Rect) -> Option<PaneLayout> {
     })
 }
 
-fn legacy_stacked_pane_layout(area: Rect) -> Option<PaneLayout> {
+fn legacy_stacked_pane_layout(area: Rect, show_places: bool) -> Option<PaneLayout> {
     let (places, content) = split_places_and_content(
         area,
+        show_places,
         LEGACY_ICON_ONLY_PLACES_WIDTH,
         LEGACY_ICON_ONLY_PLACES_WIDTH,
         CUSTOM_FILE_BROWSER_MIN_WIDTH.max(CUSTOM_PREVIEW_MIN_WIDTH),
@@ -191,18 +228,20 @@ fn legacy_stacked_pane_layout(area: Rect) -> Option<PaneLayout> {
     })
 }
 
-fn legacy_best_effort_stacked_pane_layout(area: Rect) -> Option<PaneLayout> {
-    let (places, content) =
-        if area.width >= LEGACY_ICON_ONLY_PLACES_WIDTH + LEGACY_MIN_CONTENT_WIDTH_WITH_PLACES {
-            split_places_and_content(
-                area,
-                LEGACY_ICON_ONLY_PLACES_WIDTH,
-                LEGACY_ICON_ONLY_PLACES_WIDTH,
-                LEGACY_MIN_CONTENT_WIDTH_WITH_PLACES,
-            )?
-        } else {
-            (Rect::default(), area)
-        };
+fn legacy_best_effort_stacked_pane_layout(area: Rect, show_places: bool) -> Option<PaneLayout> {
+    let (places, content) = if show_places
+        && area.width >= LEGACY_ICON_ONLY_PLACES_WIDTH + LEGACY_MIN_CONTENT_WIDTH_WITH_PLACES
+    {
+        split_places_and_content(
+            area,
+            show_places,
+            LEGACY_ICON_ONLY_PLACES_WIDTH,
+            LEGACY_ICON_ONLY_PLACES_WIDTH,
+            LEGACY_MIN_CONTENT_WIDTH_WITH_PLACES,
+        )?
+    } else {
+        (Rect::default(), area)
+    };
     if content.height < 2 || content.width < 2 {
         return None;
     }
@@ -235,9 +274,10 @@ fn legacy_best_effort_stacked_pane_layout(area: Rect) -> Option<PaneLayout> {
     })
 }
 
-fn legacy_preview_hidden_pane_layout(area: Rect) -> PaneLayout {
+fn legacy_preview_hidden_pane_layout(area: Rect, show_places: bool) -> PaneLayout {
     if let Some((places, file_browser)) = split_places_and_content_with_comfort(
         area,
+        show_places,
         LEGACY_WIDE_PLACES_WIDTH,
         LEGACY_ICON_ONLY_PLACES_WIDTH,
         LEGACY_MIN_CONTENT_WIDTH_WITH_PLACES,
@@ -257,9 +297,10 @@ fn legacy_preview_hidden_pane_layout(area: Rect) -> PaneLayout {
     }
 }
 
-fn legacy_places_and_file_browser_layout(area: Rect) -> PaneLayout {
+fn legacy_places_and_file_browser_layout(area: Rect, show_places: bool) -> PaneLayout {
     if let Some((places, file_browser)) = split_places_and_content(
         area,
+        show_places,
         LEGACY_ICON_ONLY_PLACES_WIDTH,
         LEGACY_ICON_ONLY_PLACES_WIDTH,
         CUSTOM_FILE_BROWSER_MIN_WIDTH,
@@ -421,12 +462,14 @@ fn stacked_pane_layout_with_mins(area: Rect, weights: PaneWeights) -> Option<Pan
 
 fn split_places_and_content(
     area: Rect,
+    show_places: bool,
     preferred_places_width: u16,
     minimum_places_width: u16,
     minimum_content_width: u16,
 ) -> Option<(Rect, Rect)> {
     split_places_and_content_with_comfort(
         area,
+        show_places,
         preferred_places_width,
         minimum_places_width,
         minimum_content_width,
@@ -436,11 +479,15 @@ fn split_places_and_content(
 
 fn split_places_and_content_with_comfort(
     area: Rect,
+    show_places: bool,
     preferred_places_width: u16,
     minimum_places_width: u16,
     minimum_content_width: u16,
     places_shrink_start_width: u16,
 ) -> Option<(Rect, Rect)> {
+    if !show_places {
+        return (area.width >= minimum_content_width).then_some((Rect::default(), area));
+    }
     if area.width < minimum_places_width.saturating_add(minimum_content_width) {
         return None;
     }

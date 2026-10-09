@@ -325,6 +325,16 @@ impl App {
         )
     }
 
+    pub(crate) fn toggle_places_pane(&mut self) {
+        self.places.mode = self.places.mode.next();
+        self.status = match self.places.mode {
+            crate::places::PlacesMode::Expanded => "Places expanded",
+            crate::places::PlacesMode::Collapsed => "Places collapsed",
+            crate::places::PlacesMode::Hidden => "Places hidden",
+        }
+        .to_string();
+    }
+
     pub(crate) fn step_sidebar_place(&mut self, delta: isize) -> Result<()> {
         let places = self
             .places

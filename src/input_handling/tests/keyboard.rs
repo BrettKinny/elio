@@ -12,7 +12,7 @@ use crate::input_handling::keyboard::{
     fullscreen_preview_dispatches_and_stays, fullscreen_preview_dispatches_then_exits,
     fullscreen_preview_exits_then_dispatches, should_handle_high_frequency_horizontal_key,
 };
-use crate::places::{PlaceItem, PlaceKind, PlaceRow};
+use crate::places::{PlaceItem, PlaceKind, PlaceRow, PlacesMode};
 use crate::preview::PreviewDirectoryStatsState;
 use crossterm::event::{KeyEventKind, KeyEventState};
 use std::{
@@ -580,6 +580,31 @@ fn capital_v_toggles_preview_pane() {
         .expect("V should show preview");
     assert!(app.preview_visible());
     assert_eq!(app.status_message(), "Preview shown");
+
+    fs::remove_dir_all(root).expect("failed to remove temp root");
+}
+
+#[test]
+fn ctrl_b_cycles_places_mode() {
+    let root = temp_path("toggle-places-pane");
+    fs::create_dir_all(&root).expect("failed to create temp root");
+
+    let mut app = App::new_at(root.clone()).expect("failed to create app");
+    assert_eq!(app.places.mode, PlacesMode::Expanded);
+
+    for (mode, status) in [
+        (PlacesMode::Collapsed, "Places collapsed"),
+        (PlacesMode::Hidden, "Places hidden"),
+        (PlacesMode::Expanded, "Places expanded"),
+    ] {
+        app.handle_event(Event::Key(KeyEvent::new(
+            KeyCode::Char('b'),
+            KeyModifiers::CONTROL,
+        )))
+        .expect("ctrl-b should cycle places mode");
+        assert_eq!(app.places.mode, mode);
+        assert_eq!(app.status_message(), status);
+    }
 
     fs::remove_dir_all(root).expect("failed to remove temp root");
 }

@@ -540,6 +540,7 @@ impl App {
             Action::Sort => self.cycle_sort_mode()?,
             Action::ToggleView => self.toggle_view_mode(),
             Action::TogglePreview => self.toggle_preview_pane(),
+            Action::TogglePlaces => self.toggle_places_pane(),
             Action::FullscreenPreview => self.toggle_fullscreen_preview(),
             Action::ToggleHidden => self.toggle_hidden_files()?,
             Action::NavLeft => {
@@ -722,7 +723,8 @@ pub(super) fn fullscreen_preview_exits_then_dispatches(action: crate::config::Ac
     use crate::config::Action;
     matches!(
         action,
-        Action::Yank
+        Action::TogglePlaces
+            | Action::Yank
             | Action::Cut
             | Action::Paste
             | Action::Trash
