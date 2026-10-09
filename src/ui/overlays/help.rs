@@ -88,6 +88,7 @@ pub(in crate::ui) fn render_help_overlay(
         keys.action(&kb.toggle_preview, "toggle preview pane"),
         keys.action(&kb.fullscreen_preview, "fullscreen preview"),
     ]);
+    let places_entries = entries([keys.action(&kb.toggle_places, "expand / collapse / hide")]);
     let mouse_entries = vec![
         e("Click", "select item"),
         e("Double-click", double_click_action(mode)),
@@ -110,6 +111,10 @@ pub(in crate::ui) fn render_help_overlay(
         HelpSection {
             title: "View",
             entries: view_entries,
+        },
+        HelpSection {
+            title: "Places",
+            entries: places_entries,
         },
         HelpSection {
             title: "Search",

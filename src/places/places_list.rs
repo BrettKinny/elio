@@ -60,9 +60,28 @@ pub enum PlaceRow {
     Item(PlaceItem),
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum PlacesMode {
+    #[default]
+    Expanded,
+    Collapsed,
+    Hidden,
+}
+
+impl PlacesMode {
+    pub(crate) fn next(self) -> Self {
+        match self {
+            Self::Expanded => Self::Collapsed,
+            Self::Collapsed => Self::Hidden,
+            Self::Hidden => Self::Expanded,
+        }
+    }
+}
+
 pub(crate) struct PlacesState {
     pub(crate) rows: Vec<PlaceRow>,
     pub(crate) last_refresh_at: Instant,
+    pub(crate) mode: PlacesMode,
 }
 
 impl PlacesState {
@@ -70,6 +89,7 @@ impl PlacesState {
         Self {
             rows: Vec::new(),
             last_refresh_at: Instant::now(),
+            mode: PlacesMode::Expanded,
         }
     }
 

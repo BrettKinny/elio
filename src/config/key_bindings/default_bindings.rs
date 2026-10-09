@@ -53,6 +53,7 @@ impl Default for KeyBindings {
             sort: KeyList::one('s'),
             toggle_view: KeyList::one('v'),
             toggle_preview: KeyList::one('V'),
+            toggle_places: KeyList(vec![KeySpec::ctrl_char('b')]),
             fullscreen_preview: KeyList::one('P'),
             toggle_hidden: KeyList::one('.'),
             nav_left: KeyList(vec![KeySpec::char('h'), KeySpec::named(NamedKey::Left)]),

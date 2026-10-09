@@ -345,6 +345,12 @@ pub(super) fn resolve_key_overrides(
             override_value: overrides.scroll_preview_down,
             default: defaults.scroll_preview_down.clone(),
         },
+        RawBinding {
+            name: "toggle_places",
+            action: Action::TogglePlaces,
+            override_value: overrides.toggle_places,
+            default: defaults.toggle_places.clone(),
+        },
     ];
 
     // Step 1: parse each override independently, falling back to default on
@@ -451,6 +457,7 @@ pub(super) fn resolve_key_overrides(
         scroll_preview_right: resolved(47),
         scroll_preview_up: resolved(48),
         scroll_preview_down: resolved(49),
+        toggle_places: resolved(50),
     }
 }
 

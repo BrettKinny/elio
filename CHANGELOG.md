@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added XDG Desktop Portal FileChooser integration on Linux and FreeBSD, allowing elio to serve as the file chooser for desktop applications via `elio portal enable`, with independent routing for different desktop environments or window managers.
 - Added a Nix flake.
+- Added a configurable `toggle_places` (`Ctrl+B`) shortcut to cycle the places sidebar between expanded, icon-only and hidden.
 - Added `Tab` as a keybinding to switch between files and folders in Fuzzy Find without clearing the query. ([#296])
 - Added `[preview] tab_width` to configure tab width in text and code previews (1–16 columns, default 4). ([#292])
 - Added image preview support for Rio. ([#303])
@@ -39,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on Unix.
 - Fixed the terminal cell-size probe writing to stdout on every platform, which could corrupt
   `--chooser-file -` output when an image preview was open.
+- Fixed name sorting by making it aware of the system locale, including accented characters and numeric names. ([#314])
 
 ## [1.12.0] - 2026-08-24
 
@@ -371,6 +373,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [1.1.0]: https://github.com/elio-fm/elio/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/elio-fm/elio/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/elio-fm/elio/releases/tag/v1.0.0
+[#314]: https://github.com/elio-fm/elio/issues/314
 [#303]: https://github.com/elio-fm/elio/issues/303
 [#296]: https://github.com/elio-fm/elio/issues/296
 [#293]: https://github.com/elio-fm/elio/issues/293
