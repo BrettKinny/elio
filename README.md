@@ -1,6 +1,6 @@
 <h1 align="left"><img src="assets/logo.png" width="64" alt="elio logo" align="absmiddle" />&nbsp;elio</h1>
 
-Snappy, batteries-included terminal file manager with rich previews, inline images, bulk actions, and trash support.
+Snappy, batteries-included terminal file manager.
 
 ![elio — default theme](examples/themes/default/screenshot.webp)
 
@@ -103,18 +103,6 @@ cargo install elio
 > [!TIP]
 > Recommended: use a Nerd Font in your terminal so icons display correctly.
 
-## Example Themes
-
-A few bundled themes are shown below. More are available in [`examples/themes/`](examples/themes/). See [Theming](#theming) for theme paths and docs.
-
-| Catppuccin Mocha | Navi |
-|---|---|
-| <p align="center"><img src="examples/themes/catppuccin-mocha/screenshot.webp" alt="Catppuccin Mocha" width="440"></p> | <p align="center"><img src="examples/themes/navi/screenshot.webp" alt="Navi" width="440"></p> |
-
-| Amber Dusk | Blush Light |
-|---|---|
-| <p align="center"><img src="examples/themes/amber-dusk/screenshot.webp" alt="Amber Dusk" width="440"></p> | <p align="center"><img src="examples/themes/blush-light/screenshot.webp" alt="Blush Light" width="440"></p> |
-
 ## Image Preview Compatibility
 
 | Terminal | Protocol | Status |
@@ -205,7 +193,7 @@ https://elio-fm.github.io/docs/configuration/
 
 ## Theming
 
-elio themes are TOML files layered on top of the built-in defaults, so you only need to set the keys you want to change.
+Themes override elio’s defaults, so you only need to set what you want to change.
 
 | Platform | Theme file |
 |---|---|
@@ -215,9 +203,17 @@ elio themes are TOML files layered on top of the built-in defaults, so you only 
 
 Use `elio --theme FILE` to load a theme from a custom path instead of the default location.
 
-See [`assets/themes/default/theme.toml`](assets/themes/default/theme.toml) for the full default theme and [`examples/themes/`](examples/themes/) for ready-made themes.
+A few example themes:
 
-For transparent or terminal-palette setups, see [`examples/themes/transparent/theme.toml`](examples/themes/transparent/theme.toml) and [`examples/themes/terminal-ansi/theme.toml`](examples/themes/terminal-ansi/theme.toml).
+| Catppuccin Mocha | Transparent |
+|---|---|
+| <p align="center"><img src="examples/themes/catppuccin-mocha/screenshot.webp" alt="Catppuccin Mocha" width="440"></p> | <p align="center"><img src="examples/themes/transparent/screenshot.webp" alt="Transparent" width="440"></p> |
+
+| Amber Dusk | Blush Light |
+|---|---|
+| <p align="center"><img src="examples/themes/amber-dusk/screenshot.webp" alt="Amber Dusk" width="440"></p> | <p align="center"><img src="examples/themes/blush-light/screenshot.webp" alt="Blush Light" width="440"></p> |
+
+See [`assets/themes/default/theme.toml`](assets/themes/default/theme.toml) for the full default theme and [`examples/themes/`](examples/themes/) for all bundled themes.
 
 Theme docs:
 https://elio-fm.github.io/docs/themes/
