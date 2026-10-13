@@ -27,9 +27,16 @@ pub(crate) struct UninstallReport {
 pub(crate) const MANAGED_START: &str = "# >>> elio shell integration >>>";
 pub(crate) const MANAGED_END: &str = "# <<< elio shell integration <<<";
 
-pub(crate) fn install(shell: Shell, binary: &str) -> Result<InstallReport> {
+/// Installs the integration for `shell`. `detected_executable` is the shell's own
+/// executable when the shell was detected from the parent process, so the
+/// PowerShell that gets version-checked is the one that was detected.
+pub(crate) fn install(
+    shell: Shell,
+    binary: &str,
+    detected_executable: Option<&Path>,
+) -> Result<InstallReport> {
     if shell == Shell::Pwsh {
-        ensure_supported_version(Command::new(PWSH_PROGRAM))?;
+        ensure_supported_version(pwsh_version_command(detected_executable))?;
     }
 
     let path = integration_path(shell)?;
@@ -40,6 +47,13 @@ pub(crate) fn install(shell: Shell, binary: &str) -> Result<InstallReport> {
         reload_command: reload_command(shell, &path),
         path,
     })
+}
+
+pub(super) fn pwsh_version_command(detected_executable: Option<&Path>) -> Command {
+    match detected_executable {
+        Some(executable) => Command::new(executable),
+        None => Command::new(PWSH_PROGRAM),
+    }
 }
 
 pub(super) fn install_at(shell: Shell, path: &Path, binary: &str) -> Result<()> {

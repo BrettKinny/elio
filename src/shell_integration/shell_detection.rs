@@ -1,5 +1,8 @@
 use anyhow::{Context, Result};
-use std::{env, path::Path};
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 
 pub(crate) const SUPPORTED_SHELLS: &str = "bash, zsh, fish, nu, pwsh";
 
@@ -68,13 +71,33 @@ pub(super) enum ShellDetection {
     Unknown,
 }
 
-pub(crate) fn detect_shell(action: ShellIntegrationAction) -> Result<Shell> {
-    match detect_parent_shell() {
-        ShellDetection::Supported(shell) => Ok(shell),
+/// The shell `elio shell install`/`uninstall` targets when none is named.
+pub(crate) struct DetectedShell {
+    pub(crate) shell: Shell,
+    /// Executable of the parent process the shell was detected from, when the
+    /// platform reports it.
+    pub(crate) executable: Option<PathBuf>,
+}
+
+struct ParentShell {
+    detection: ShellDetection,
+    executable: Option<PathBuf>,
+}
+
+pub(crate) fn detect_shell(action: ShellIntegrationAction) -> Result<DetectedShell> {
+    let parent = detect_parent_shell();
+    match parent.detection {
+        ShellDetection::Supported(shell) => Ok(DetectedShell {
+            shell,
+            executable: parent.executable,
+        }),
         ShellDetection::Unsupported(shell) => Err(anyhow::anyhow!(
             unsupported_active_shell_message(action, &shell)
         )),
-        ShellDetection::Unknown => detect_shell_from_environment(action),
+        ShellDetection::Unknown => Ok(DetectedShell {
+            shell: detect_shell_from_environment(action)?,
+            executable: None,
+        }),
     }
 }
 
@@ -91,7 +114,15 @@ fn detect_shell_from_environment(action: ShellIntegrationAction) -> Result<Shell
 }
 
 #[cfg(unix)]
-fn detect_parent_shell() -> ShellDetection {
+fn detect_parent_shell() -> ParentShell {
+    ParentShell {
+        detection: detect_parent_shell_from_ps(),
+        executable: None,
+    }
+}
+
+#[cfg(unix)]
+fn detect_parent_shell_from_ps() -> ShellDetection {
     let parent_pid = unsafe { libc::getppid() }.to_string();
     let output = std::process::Command::new("ps")
         .args(["-p", &parent_pid, "-o", "comm="])
@@ -113,35 +144,91 @@ fn detect_parent_shell() -> ShellDetection {
 }
 
 #[cfg(windows)]
-fn detect_parent_shell() -> ShellDetection {
-    match parent_process_name() {
-        Some(name) => detect_shell_from_command(&name),
-        None => ShellDetection::Unknown,
+fn detect_parent_shell() -> ParentShell {
+    match parent_process() {
+        Some(parent) => ParentShell {
+            detection: detect_shell_from_command(&parent.name),
+            executable: process_executable(&parent),
+        },
+        None => ParentShell {
+            detection: ShellDetection::Unknown,
+            executable: None,
+        },
     }
 }
 
 #[cfg(not(any(unix, windows)))]
-fn detect_parent_shell() -> ShellDetection {
-    ShellDetection::Unknown
+fn detect_parent_shell() -> ParentShell {
+    ParentShell {
+        detection: ShellDetection::Unknown,
+        executable: None,
+    }
 }
 
-/// Executable name of the process that launched elio. A launcher shim carrying
-/// elio's own name (Scoop installs one) is stepped over so the shell behind it
-/// is reported instead.
+/// The process that launched elio. A launcher shim carrying elio's own name
+/// (Scoop installs one) is stepped over so the shell behind it is reported
+/// instead.
 #[cfg(windows)]
-fn parent_process_name() -> Option<String> {
+fn parent_process() -> Option<ProcessInfo> {
     let processes = process_snapshot()?;
     let find = |process_id: u32| processes.iter().find(|process| process.id == process_id);
 
     let current = find(std::process::id())?;
     let parent = find(current.parent_id)?;
     if parent.name.eq_ignore_ascii_case(&current.name) {
-        return find(parent.parent_id).map(|process| process.name.clone());
+        return find(parent.parent_id).cloned();
     }
-    Some(parent.name.clone())
+    Some(parent.clone())
+}
+
+/// Full path of `process`'s executable. The path is dropped when its file name
+/// no longer matches the snapshot, which means the process id was reused.
+#[cfg(windows)]
+fn process_executable(process: &ProcessInfo) -> Option<PathBuf> {
+    let path = process_executable_path(process.id)?;
+    let file_name = path.file_name()?.to_str()?;
+    file_name
+        .eq_ignore_ascii_case(&process.name)
+        .then_some(path)
 }
 
 #[cfg(windows)]
+pub(super) fn process_executable_path(process_id: u32) -> Option<PathBuf> {
+    use std::{ffi::OsString, ffi::c_void, os::windows::ffi::OsStringExt};
+
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    const MAX_LONG_PATH: usize = 32_768;
+
+    unsafe extern "system" {
+        fn OpenProcess(access: u32, inherit_handle: i32, process_id: u32) -> *mut c_void;
+        fn QueryFullProcessImageNameW(
+            process: *mut c_void,
+            flags: u32,
+            exe_name: *mut u16,
+            size: *mut u32,
+        ) -> i32;
+        fn CloseHandle(handle: *mut c_void) -> i32;
+    }
+
+    // SAFETY: the process handle is checked before use and closed exactly once.
+    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, process_id) };
+    if process.is_null() {
+        return None;
+    }
+
+    let mut buffer = vec![0u16; MAX_LONG_PATH];
+    let mut length = buffer.len() as u32;
+    // SAFETY: `length` carries the buffer's capacity in and the path length out.
+    let queried =
+        unsafe { QueryFullProcessImageNameW(process, 0, buffer.as_mut_ptr(), &mut length) } != 0;
+    // SAFETY: `process` is a valid handle owned by this function.
+    unsafe { CloseHandle(process) };
+
+    queried.then(|| PathBuf::from(OsString::from_wide(&buffer[..length as usize])))
+}
+
+#[cfg(windows)]
+#[derive(Clone)]
 struct ProcessInfo {
     id: u32,
     parent_id: u32,
