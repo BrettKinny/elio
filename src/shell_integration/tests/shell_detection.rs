@@ -77,3 +77,18 @@ fn shell_parse_accepts_pwsh_but_not_windows_powershell() {
         ShellDetection::Unsupported("powershell".to_string())
     );
 }
+
+#[cfg(windows)]
+#[test]
+fn process_executable_path_reports_the_full_path_of_a_running_process() {
+    let reported = process_executable_path(std::process::id())
+        .expect("the test process should report its executable");
+    let expected = std::env::current_exe().expect("current executable should be known");
+
+    assert_eq!(
+        reported.canonicalize().expect("reported path should exist"),
+        expected
+            .canonicalize()
+            .expect("current executable should exist")
+    );
+}

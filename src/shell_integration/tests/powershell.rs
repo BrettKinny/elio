@@ -1,11 +1,26 @@
-use super::super::powershell::{ensure_supported_version, parse_version};
-use std::process::Command;
+use super::super::{
+    install::pwsh_version_command,
+    powershell::{PWSH_PROGRAM, ensure_supported_version, parse_version},
+};
+use std::{path::Path, process::Command};
 
-/// Stands in for a PowerShell that prints `reported` for `--version`.
+/// Stands in for a PowerShell that prints `reported` for `--version`. The script
+/// is passed to `sh` as a file because shells disagree on what an argument after
+/// `sh -c <command>` means.
 #[cfg(unix)]
 fn fake_pwsh(reported: &str) -> Command {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static NEXT_SCRIPT: AtomicUsize = AtomicUsize::new(0);
+    let script = std::env::temp_dir().join(format!(
+        "elio-fake-pwsh-{}-{}.sh",
+        std::process::id(),
+        NEXT_SCRIPT.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::write(&script, format!("echo '{reported}'\n")).expect("fake pwsh should be written");
+
     let mut command = Command::new("sh");
-    command.arg("-c").arg(format!("echo '{reported}'"));
+    command.arg(script);
     command
 }
 
@@ -17,7 +32,17 @@ fn fake_pwsh(reported: &str) -> Command {
 }
 
 fn check_reported_version(reported: &str) -> anyhow::Result<()> {
-    ensure_supported_version(fake_pwsh(reported))
+    let command = fake_pwsh(reported);
+    #[cfg(unix)]
+    let script = command.get_args().next().map(std::path::PathBuf::from);
+
+    let result = ensure_supported_version(command);
+
+    #[cfg(unix)]
+    if let Some(script) = script {
+        std::fs::remove_file(script).expect("fake pwsh should be removed");
+    }
+    result
 }
 
 #[test]
@@ -68,4 +93,15 @@ fn ensure_supported_version_reports_a_missing_powershell() {
 
     assert!(error.contains("to check its version"));
     assert!(error.contains("requires PowerShell 7.4 or newer"));
+}
+
+#[test]
+fn version_check_runs_the_detected_powershell_instead_of_resolving_path() {
+    let detected = Path::new("/opt/powershell-7.3/pwsh");
+
+    assert_eq!(
+        pwsh_version_command(Some(detected)).get_program(),
+        detected.as_os_str()
+    );
+    assert_eq!(pwsh_version_command(None).get_program(), PWSH_PROGRAM);
 }
