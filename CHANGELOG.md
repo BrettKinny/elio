@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `[focused_entry]` theme options for bold, italic, and underline styles for focused entry names. ([#328])
 - Added FileChooser portal support for `footclient` via manual configuration. ([#322])
 - Added HEIC and HEIF image previews when ffmpeg is available. ([#338])
+- Added shell integration for PowerShell.
 
 ### Changed
 
@@ -47,7 +48,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `[ui] default_sort` to set the initial browser sort (name, modified, or size).
 - Added recursive folder size calculation in the background when sorting by size.
 - Added `--save-as` support for `--chooser-file`, adding Save As behavior through a dedicated popup. ([#273])
-- Added shell integration for PowerShell.
 
 ### Changed
 

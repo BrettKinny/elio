@@ -92,3 +92,16 @@ fn process_executable_path_reports_the_full_path_of_a_running_process() {
             .expect("current executable should exist")
     );
 }
+
+#[test]
+fn detected_pwsh_without_a_reported_path_is_refused_where_paths_are_reported() {
+    let error = ensure_detected_pwsh_path(Shell::Pwsh, None, true)
+        .expect_err("an unreported pwsh path should be refused")
+        .to_string();
+    assert!(error.contains("elio shell install pwsh"), "{error}");
+
+    let detected = std::path::Path::new(r"C:\Program Files\PowerShell\7\pwsh.exe");
+    assert!(ensure_detected_pwsh_path(Shell::Pwsh, Some(detected), true).is_ok());
+    assert!(ensure_detected_pwsh_path(Shell::Pwsh, None, false).is_ok());
+    assert!(ensure_detected_pwsh_path(Shell::Fish, None, true).is_ok());
+}

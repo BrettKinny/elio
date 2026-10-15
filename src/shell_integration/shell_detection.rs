@@ -87,10 +87,15 @@ struct ParentShell {
 pub(crate) fn detect_shell(action: ShellIntegrationAction) -> Result<DetectedShell> {
     let parent = detect_parent_shell();
     match parent.detection {
-        ShellDetection::Supported(shell) => Ok(DetectedShell {
-            shell,
-            executable: parent.executable,
-        }),
+        ShellDetection::Supported(shell) => {
+            if matches!(action, ShellIntegrationAction::Install) {
+                ensure_detected_pwsh_path(shell, parent.executable.as_deref(), cfg!(windows))?;
+            }
+            Ok(DetectedShell {
+                shell,
+                executable: parent.executable,
+            })
+        }
         ShellDetection::Unsupported(shell) => Err(anyhow::anyhow!(
             unsupported_active_shell_message(action, &shell)
         )),
@@ -99,6 +104,22 @@ pub(crate) fn detect_shell(action: ShellIntegrationAction) -> Result<DetectedShe
             executable: None,
         }),
     }
+}
+
+/// Installing for a detected `pwsh` version-checks that exact executable. Where
+/// the platform reports the parent's path (Windows) but did not for this
+/// process, refuse rather than checking a possibly different `pwsh` from PATH.
+pub(super) fn ensure_detected_pwsh_path(
+    shell: Shell,
+    executable: Option<&Path>,
+    platform_reports_path: bool,
+) -> Result<()> {
+    if shell == Shell::Pwsh && platform_reports_path && executable.is_none() {
+        anyhow::bail!(
+            "error: could not determine which PowerShell launched elio\n\nWindows did not report the path of the parent pwsh.exe, so its version cannot be checked.\nRun this explicitly to install for the pwsh on your PATH:\n  elio shell install pwsh"
+        );
+    }
+    Ok(())
 }
 
 fn detect_shell_from_environment(action: ShellIntegrationAction) -> Result<Shell> {
